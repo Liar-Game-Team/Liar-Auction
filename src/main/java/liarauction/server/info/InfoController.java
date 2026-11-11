@@ -1,7 +1,13 @@
 package liarauction.server.info;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import liarauction.common.Artwork;
+import liarauction.common.GameConfig;
+import liarauction.common.Message;
 import liarauction.common.PlayerState;
+import liarauction.common.Protocol;
 import liarauction.server.GameRoom;
 
 /**
@@ -13,14 +19,51 @@ import liarauction.server.GameRoom;
 public final class InfoController {
 
     private final GameRoom room;
+    private final InspectionGenerator inspections;
+    /** 이번 라운드에 각 플레이어가 받은 감정 정보 (닉네임 → 정보) */
+    private final Map<String, Inspection> roundInspections = new HashMap<>();
 
     public InfoController(GameRoom room) {
-        this.room = room;
+        this(room, new InspectionGenerator());
     }
 
-    /** 연결 지점 1: 라운드 시작 (파트 A가 부름) */
+    public InfoController(GameRoom room, InspectionGenerator inspections) {
+        this.room = room;
+        this.inspections = inspections;
+    }
+
+    /**
+     * 연결 지점 1: 라운드 시작 (파트 A가 {@code state.startNextRound()} 다음에 부름).
+     * 감정서·소문을 만들어 각 플레이어에게 자기 것만 보낸다 (#8).
+     */
     public void onRoundStart(Artwork artwork) {
-        // TODO(#7, #8): 감정서·소문 생성, 담당 교대, INSPECTION 개별 전송
+        int round = room.state().round();
+        if (round < 1) {
+            throw new IllegalStateException("라운드 시작 전입니다");
+        }
+        List<PlayerState> players = room.state().players();
+        roundInspections.clear();
+        for (int i = 0; i < players.size(); i++) {
+            String nickname = players.get(i).nickname();
+            Inspection insp = inspections.generate(artwork, isOfficialHolder(i, round));
+            roundInspections.put(nickname, insp);
+            room.sendTo(nickname, Message.of(Protocol.INSPECTION, insp.official(), insp.text()));
+        }
+    }
+
+    /**
+     * 감정서 담당 교대: 1라운드는 먼저 들어온 플레이어(0번)가 감정서, 매 라운드 바뀐다.
+     *
+     * @param playerIndex 입장 순서 (0, 1)
+     * @param round 1부터
+     */
+    static boolean isOfficialHolder(int playerIndex, int round) {
+        return playerIndex == (round - 1) % GameConfig.MAX_PLAYERS;
+    }
+
+    /** 이번 라운드에 그 플레이어가 받은 감정 정보, 없으면 null */
+    public Inspection inspectionOf(String nickname) {
+        return roundInspections.get(nickname);
     }
 
     /** 연결 지점 2: 낙찰 (파트 A가 부름). 되팔기 단계 준비 */
@@ -53,6 +96,6 @@ public final class InfoController {
 
     /** 상대가 나가서 게임이 중단됐을 때 */
     public void onGameStopped() {
-        // 필요하면 진행 중인 되팔기 등 정리
+        roundInspections.clear();
     }
 }
