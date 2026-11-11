@@ -40,14 +40,18 @@
 
 ## 📡 네트워크 통신 프로토콜 (Protocol Specification)
 
-메시지는 `COMMAND|ARG1|ARG2...` 형태의 텍스트 프로토콜로 전달됩니다.
+메시지는 한 줄에 하나, `COMMAND|ARG1|ARG2...` 형태의 텍스트 프로토콜로 전달됩니다.
+
+* 메시지 이름과 인자 개수는 `liarauction.common.Protocol`, 만들기·읽기는 `liarauction.common.Message`를 사용합니다.
+* 인자 안의 특수문자는 이스케이프합니다: `\` → `\\`, `|` → `\p`, 줄바꿈 → `\n` / `\r` (채팅에 `|`가 들어가도 안전)
+* 인자 개수가 다르거나 모르는 메시지는 받는 쪽에서 무시하고 `ERROR`로 응답합니다.
 
 ### 1. Client ➡️ Server
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
 | `REQ_LOGIN` | `nickname` | 대기실 입장 및 닉네임 등록 |
 | `REQ_CHAT` | `message` | 협상 채팅 메시지 전송 |
-| `REQ_BID` | `amount` | 입찰 요청 (+10, +50, +100) |
+| `REQ_BID` | `increment` | 입찰 요청, 현재가에 더할 금액 (`10` / `50` / `100`) |
 | `REQ_APPRAISE` | - | 정밀 감정 요청 (게임당 1회) |
 | `REQ_RESALE` | `price` | 낙찰 작품 되팔기 가격 제안 |
 | `RESALE_ANS` | `ACCEPT / REJECT` | 되팔기 제안 수락 또는 거절 |
@@ -55,18 +59,23 @@
 ### 2. Server ➡️ Client
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
+| `LOGIN_OK` | `nickname` | 로그인 성공, 상대 입장 대기 |
+| `LOGIN_FAIL` | `reason` | 로그인 실패 (닉네임 중복, 방이 가득 참 등) |
+| `GAME_START` | `opponent\|startCash\|totalRounds` | 두 명이 모여 게임 시작 |
 | `BROADCAST_CHAT` | `sender\|message` | 전체 채팅 브로드캐스트 |
-| `START_ROUND` | `roundNum\|title\|artist` | 라운드 시작 및 작품 정보 공개 |
-| `PHASE` | `phaseName\|seconds` | 라운드 단계 전환 및 남은 시간 (서버 타이머 기준) |
-| `INSPECTION` | `isOfficial\|infoText` | 비공개 감정 결과 (감정서 80% / 소문 60%), **플레이어별 개별 전송** |
+| `START_ROUND` | `roundNum\|title\|artist\|startPrice` | 라운드 시작 및 작품 정보 공개 |
+| `PHASE` | `phaseName\|seconds` | 라운드 단계 전환 및 남은 시간 (서버 타이머 기준, `phaseName`은 `Phase` 이름) |
+| `INSPECTION` | `isOfficial\|infoText` | 비공개 감정 결과 (`true`=감정서 80% / `false`=소문 60%), **플레이어별 개별 전송** |
 | `APPRAISE_RESULT` | `infoText` | 정밀 감정 결과 (요청자에게만 전송) |
 | `UPDATE_BID` | `highestBidder\|currentPrice` | 실시간 입찰 최신화 |
 | `BID_REJECT` | `reason` | 입찰 거부 (현금 부족 등) |
 | `ROUND_END` | `winner\|price` | 해당 라운드 낙찰 결과 (유찰 시 `winner`=`NONE`) |
 | `RESALE_OFFER` | `from\|price` | 상대의 되팔기 제안 전달 |
 | `RESALE_RESULT` | `ACCEPT / REJECT\|price` | 되팔기 성사 여부 (현금·작품 이동 반영) |
+| `UPDATE_CASH` | `nickname\|cash` | 플레이어 현금 변경 (낙찰·되팔기 후) |
 | `OPPONENT_LEFT` | `nickname` | 상대 접속 끊김 알림 |
-| `GAME_OVER` | `winner\|details` | 최종 진위 공개 및 승패 판정 |
+| `GAME_OVER` | `winner\|details` | 최종 진위 공개 및 승패 판정 (무승부 시 `winner`=`DRAW`) |
+| `ERROR` | `reason` | 잘못된 요청 (형식 오류, 지금 단계에서 할 수 없는 요청 등) |
 
 ---
 
