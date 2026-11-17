@@ -1,15 +1,8 @@
 package liarauction.server;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.net.Socket;
-import java.nio.charset.StandardCharsets;
 import liarauction.common.GameConfig;
 import liarauction.common.Message;
 import liarauction.common.Protocol;
@@ -115,37 +108,6 @@ class AuctionServerTest {
     }
 
     private TestClient connect() throws IOException {
-        return new TestClient(new Socket("localhost", server.getPort()));
-    }
-
-    private static final class TestClient implements AutoCloseable {
-        private final Socket socket;
-        private final BufferedReader in;
-        private final PrintWriter out;
-
-        TestClient(Socket socket) throws IOException {
-            this.socket = socket;
-            this.in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-            this.out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
-        }
-
-        void send(Message msg) {
-            sendRaw(msg.encode());
-        }
-
-        void sendRaw(String line) {
-            out.println(line);
-        }
-
-        Message read() throws IOException {
-            String line = in.readLine();
-            assertNotNull(line, "연결이 끊김");
-            return Message.parse(line);
-        }
-
-        @Override
-        public void close() throws IOException {
-            socket.close();
-        }
+        return new TestClient(server.getPort());
     }
 }
