@@ -29,3 +29,20 @@ tasks.withType(JavaCompile).configureEach {
 test {
     useJUnitPlatform()
 }
+
+// 실행: ./gradlew runServer (포트 변경: --args="6000"), ./gradlew runClient
+tasks.register('runServer', JavaExec) {
+    group = 'application'
+    description = '게임 서버 실행'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'liarauction.server.ServerMain'
+    javaLauncher = javaToolchains.launcherFor(java.toolchain)
+}
+
+tasks.register('runClient', JavaExec) {
+    group = 'application'
+    description = '클라이언트 실행'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'liarauction.client.ClientMain'
+    javaLauncher = javaToolchains.launcherFor(java.toolchain)
+}

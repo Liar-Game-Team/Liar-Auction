@@ -34,7 +34,24 @@
 ```bash
 ./gradlew build   # 컴파일 + 테스트
 ./gradlew test    # 테스트만
+./gradlew runServer                 # 서버 실행 (기본 포트 5000, 변경: --args="6000")
+./gradlew runClient                 # 클라이언트 실행 (창 2개 띄워서 1:1 테스트)
 ```
+
+### 코드 구조
+| 패키지 | 내용 | 담당 |
+| :--- | :--- | :--- |
+| `liarauction.common` | `Protocol`·`Message` (프로토콜), `Artwork`·`Grade`·`PlayerState`·`Phase`·`GameState` (공용 클래스), `GameConfig` (설정값) | 공통 |
+| `liarauction.server` | `AuctionServer` (접속 받기), `ClientHandler` (클라이언트당 스레드), `GameRoom` (로그인·채팅·접속 끊김, 메시지 분배) | 공통 |
+| `liarauction.server.auction` | `AuctionController`: 덱 생성, 단계 타이머, 입찰 판정 | 파트 A |
+| `liarauction.server.info` | `InfoController`: 감정서·소문, 정밀 감정, 되팔기, 정산 | 파트 B |
+| `liarauction.client` | `ServerConnection` (받기 스레드 → Swing 스레드로 전달) | 공통 |
+| `liarauction.client.ui` | `MainFrame` (로그인 → 대기 → 게임), `GamePanel`·`StatusPanel`·`ChatPanel` | 공통 |
+| | `AuctionPanel` (경매 화면) | 파트 A |
+| | `InfoPanel` (감정 정보·되팔기·결과 창) | 파트 B |
+
+* 파트별 할 일은 컨트롤러·패널에 `TODO(#이슈번호)`로 표시되어 있습니다.
+* 게임 상태를 바꾸는 코드는 `GameRoom` lock 안에서 실행됩니다. 타이머 스레드에서 바꿀 때는 `synchronized (room) { ... }`로 감쌉니다.
 
 ---
 
