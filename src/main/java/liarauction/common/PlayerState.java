@@ -13,6 +13,8 @@ public final class PlayerState {
     private final String nickname;
     private int cash;
     private final List<Artwork> artworks = new ArrayList<>();
+    private int certificates = GameConfig.START_CERTIFICATES;
+    private int jammers = GameConfig.START_JAMMERS;
 
     public PlayerState(String nickname, int startCash) {
         this.nickname = Objects.requireNonNull(nickname, "nickname");
@@ -76,6 +78,33 @@ public final class PlayerState {
     /** 보유 작품 목록 (복사본) */
     public synchronized List<Artwork> artworks() {
         return List.copyOf(artworks);
+    }
+
+    public synchronized int itemCount(Item item) {
+        return switch (Objects.requireNonNull(item, "item")) {
+            case CERTIFICATE -> certificates;
+            case JAMMER -> jammers;
+        };
+    }
+
+    /** Consumes one item if available. */
+    public synchronized boolean consumeItem(Item item) {
+        return switch (Objects.requireNonNull(item, "item")) {
+            case CERTIFICATE -> {
+                if (certificates == 0) {
+                    yield false;
+                }
+                certificates--;
+                yield true;
+            }
+            case JAMMER -> {
+                if (jammers == 0) {
+                    yield false;
+                }
+                jammers--;
+                yield true;
+            }
+        };
     }
 
     /** 최종 자산 = 현금 + 보유 작품 실제 가치 합 (서버 전용) */

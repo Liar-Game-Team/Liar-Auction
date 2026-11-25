@@ -37,10 +37,9 @@ class RoundPhaseTimerTest {
             for (int round = 1; round <= GameConfig.TOTAL_ROUNDS; round++) {
                 assertEquals(List.of(
                                 Phase.REVEAL,
-                                Phase.INSPECTION,
+                                Phase.RUMOR,
                                 Phase.NEGOTIATION,
-                                Phase.AUCTION,
-                                Phase.RESALE),
+                                Phase.AUCTION),
                         listener.phasesByRound.get(round - 1));
             }
         }
@@ -50,7 +49,8 @@ class RoundPhaseTimerTest {
     void allowsAuctionToCloseBeforeItsDeadline() throws Exception {
         GameState game = newGame();
         RecordingListener listener = new RecordingListener();
-        AuctionTiming timing = timing(Duration.ofMillis(20), Duration.ofSeconds(2));
+        AuctionTiming timing = timing(
+                Duration.ofMillis(20), Duration.ofSeconds(2), Duration.ofSeconds(2));
 
         try (RoundPhaseTimer timer = new RoundPhaseTimer(game, timing, listener)) {
             timer.start();
@@ -58,8 +58,10 @@ class RoundPhaseTimerTest {
 
             assertTrue(timer.closeAuction());
             assertFalse(timer.closeAuction());
-            assertEquals(Phase.RESALE, game.phase());
+            assertEquals(Phase.AUCTION, game.phase());
             assertEquals(1, listener.auctionsClosed.size());
+            Thread.sleep(100);
+            assertEquals(1, game.round(), "결과 표시 시간이 끝나기 전에는 다음 라운드로 넘어가지 않음");
         }
     }
 
@@ -68,8 +70,12 @@ class RoundPhaseTimerTest {
     }
 
     private static AuctionTiming timing(Duration shortPhase, Duration auction) {
+        return timing(shortPhase, auction, shortPhase);
+    }
+
+    private static AuctionTiming timing(Duration shortPhase, Duration auction, Duration result) {
         return new AuctionTiming(
-                shortPhase, shortPhase, shortPhase, auction, shortPhase, Duration.ofMillis(5));
+                shortPhase, shortPhase, shortPhase, auction, result, Duration.ofMillis(5));
     }
 
     private static GameState newGame() {

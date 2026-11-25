@@ -1,11 +1,11 @@
 package liarauction.server;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import liarauction.common.GameConfig;
 import liarauction.common.Message;
 import liarauction.common.Phase;
@@ -117,11 +117,11 @@ class AuctionServerTest {
     void completesEightRoundsWithBidsAndAnUnbidAuction() throws Exception {
         server.stop();
         server = new AuctionServer(0, new AuctionTiming(
-                Duration.ofMillis(25),
-                Duration.ofMillis(25),
-                Duration.ofMillis(25),
+                Duration.ofMillis(400),
+                Duration.ofMillis(100),
+                Duration.ofMillis(60),
                 Duration.ofMillis(500),
-                Duration.ofMillis(25),
+                Duration.ofMillis(50),
                 Duration.ofMillis(40)));
         server.start();
 
@@ -137,12 +137,33 @@ class AuctionServerTest {
                 assertEquals(String.valueOf(round), startB.arg(0));
                 assertEquals("100", startA.arg(3));
 
-                List<Phase> phases = new ArrayList<>();
-                readUntilAuctionPhase(alice, phases);
-                readUntilAuctionPhase(bob, null);
-                assertEquals(
-                        List.of(Phase.REVEAL, Phase.INSPECTION, Phase.NEGOTIATION, Phase.AUCTION),
-                        phases);
+                Message itemsA = readUntil(alice, Protocol.ITEMS);
+                Message itemsB = readUntil(bob, Protocol.ITEMS);
+                assertEquals(round == 1 ? "1" : "0", itemsA.arg(0));
+                assertEquals("1", itemsA.arg(1));
+                assertEquals("1", itemsB.arg(0));
+                assertEquals(round == 1 ? "1" : "0", itemsB.arg(1));
+
+                if (round == 1) {
+                    alice.send(Message.of(Protocol.REQ_USE_ITEM, "CERTIFICATE"));
+                    bob.send(Message.of(Protocol.REQ_USE_ITEM, "JAMMER"));
+                    assertEquals("CERTIFICATE", readUntil(alice, Protocol.ITEM_RESULT).arg(0));
+                    assertEquals("JAMMER", readUntil(bob, Protocol.ITEM_RESULT).arg(0));
+                    assertEquals(Message.of(Protocol.ITEMS, 0, 1), readUntil(alice, Protocol.ITEMS));
+                    assertEquals(Message.of(Protocol.ITEMS, 1, 0), readUntil(bob, Protocol.ITEMS));
+                }
+
+                readUntil(alice, Protocol.RUMOR);
+                readUntil(bob, Protocol.RUMOR);
+                if (round == 2) {
+                    synchronized (server.room()) {
+                        assertNotEquals(
+                                server.room().state().currentArtwork().grade(),
+                                server.room().info().rumorOf("alice").claimedGrade());
+                    }
+                }
+                readUntilAuctionPhase(bob);
+                readUntilAuctionPhase(alice);
 
                 if (round < GameConfig.TOTAL_ROUNDS) {
                     alice.send(Message.of(Protocol.REQ_BID, 10));
@@ -176,6 +197,21 @@ class AuctionServerTest {
             assertEquals(230, server.room().state().findPlayer("alice").cash());
             assertEquals(7, server.room().state().findPlayer("alice").artworks().size());
             assertEquals(GameConfig.START_CASH, server.room().state().findPlayer("bob").cash());
+            Message resultA = readUntil(alice, Protocol.GAME_OVER);
+            Message resultB = readUntil(bob, Protocol.GAME_OVER);
+            assertEquals(resultA, resultB);
+            int aliceAssets = server.room().state().findPlayer("alice").totalAssets();
+            int bobAssets = server.room().state().findPlayer("bob").totalAssets();
+            String expectedWinner = aliceAssets == bobAssets
+                    ? Protocol.DRAW
+                    : aliceAssets > bobAssets ? "alice" : "bob";
+            assertEquals(expectedWinner, resultA.arg(0));
+            assertTrue(resultA.arg(1).contains("작품 공개"));
+            assertTrue(resultA.arg(1).contains("실제 가치"));
+            for (var artwork : server.room().state().deck()) {
+                assertTrue(resultA.arg(1).contains(artwork.title()));
+                assertTrue(resultA.arg(1).contains("실제 가치 " + artwork.realValue()));
+            }
         }
     }
 
@@ -191,17 +227,13 @@ class AuctionServerTest {
         return new TestClient(server.getPort());
     }
 
-    private static void readUntilAuctionPhase(TestClient client, List<Phase> observedPhases)
-            throws IOException {
+    private static void readUntilAuctionPhase(TestClient client) throws IOException {
         while (true) {
             Message message = client.read();
             if (!Protocol.PHASE.equals(message.command())) {
                 continue;
             }
             Phase phase = Phase.valueOf(message.arg(0));
-            if (observedPhases != null) {
-                observedPhases.add(phase);
-            }
             if (phase == Phase.AUCTION) {
                 return;
             }

@@ -2,6 +2,7 @@ package liarauction.server.info;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.EnumSet;
@@ -37,6 +38,20 @@ class InspectionGeneratorTest {
             }
         }
         assertEquals(EnumSet.of(Grade.MASTERPIECE, Grade.NORMAL), wrong);
+    }
+
+    @Test
+    void jammedRumorIsFalseAndDiffersFromTheOrdinaryRumor() {
+        InspectionGenerator generator = new InspectionGenerator(new Random(5));
+        for (Grade actual : Grade.values()) {
+            Artwork artwork = new Artwork(1, "t", "a", actual, actual.minValue());
+            for (Grade ordinaryClaim : Grade.values()) {
+                Inspection jammed = generator.generateJammedRumor(artwork, ordinaryClaim);
+                assertFalse(jammed.official());
+                assertNotEquals(actual, jammed.claimedGrade());
+                assertNotEquals(ordinaryClaim, jammed.claimedGrade());
+            }
+        }
     }
 
     @Test

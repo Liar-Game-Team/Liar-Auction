@@ -21,7 +21,7 @@ import liarauction.server.RoundPhaseTimer;
  * <p>파트 B로 넘기는 연결 지점
  * <ol>
  *   <li>라운드 시작 → {@code room.info().onRoundStart(artwork)}</li>
- *   <li>낙찰 → {@code room.info().onAuctionWon(winner, artwork, price)}</li>
+ *   <li>소문 단계 → {@code room.info().onRumorPhase(artwork)}</li>
  *   <li>게임 종료 → {@code room.info().onGameOver()}</li>
  * </ol>
  */
@@ -66,12 +66,6 @@ public final class AuctionController {
             public void onAuctionEnded(String winner, int price) {
                 synchronized (room) {
                     room.broadcast(Message.of(Protocol.ROUND_END, winner, price));
-                    if (!Protocol.NONE.equals(winner)) {
-                        PlayerState player = game.findPlayer(winner);
-                        if (player != null) {
-                            room.info().onAuctionWon(player, game.currentArtwork(), price);
-                        }
-                    }
                 }
                 roundTimer.requestAuctionClose();
             }
@@ -107,6 +101,9 @@ public final class AuctionController {
                         bidManager.openAuction(game.currentArtwork(), STARTING_PRICE);
                     }
                     room.broadcast(Message.of(Protocol.PHASE, phase.name(), secondsRemaining));
+                    if (phase == Phase.RUMOR) {
+                        room.info().onRumorPhase(game.currentArtwork());
+                    }
                 }
             }
 

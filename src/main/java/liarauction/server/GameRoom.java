@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import liarauction.common.GameConfig;
 import liarauction.common.GameState;
+import liarauction.common.Item;
 import liarauction.common.Message;
 import liarauction.common.Phase;
 import liarauction.common.PlayerState;
@@ -110,9 +111,7 @@ public final class GameRoom {
             switch (msg.command()) {
                 case Protocol.REQ_LOGIN -> from.send(Message.of(Protocol.ERROR, "이미 로그인했습니다"));
                 case Protocol.REQ_CHAT -> broadcast(Message.of(Protocol.BROADCAST_CHAT, nickname, msg.arg(0)));
-                case Protocol.REQ_APPRAISE -> info.onAppraise(player);
-                case Protocol.REQ_RESALE -> info.onResaleOffer(player, msg.intArg(0));
-                case Protocol.RESALE_ANS -> info.onResaleAnswer(player, parseAnswer(msg.arg(0)));
+                case Protocol.REQ_USE_ITEM -> info.onUseItem(player, Item.parse(msg.arg(0)));
                 default -> from.send(Message.of(Protocol.ERROR, "클라이언트가 보낼 수 없는 메시지: " + msg.command()));
             }
         } catch (IllegalArgumentException | IllegalStateException e) {
@@ -203,13 +202,5 @@ public final class GameRoom {
             return "사용할 수 없는 닉네임입니다";
         }
         return null;
-    }
-
-    private static boolean parseAnswer(String answer) {
-        return switch (answer) {
-            case Protocol.ACCEPT -> true;
-            case Protocol.REJECT -> false;
-            default -> throw new IllegalArgumentException("ACCEPT 또는 REJECT만 가능: " + answer);
-        };
     }
 }

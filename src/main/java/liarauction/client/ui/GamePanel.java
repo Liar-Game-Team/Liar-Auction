@@ -2,6 +2,9 @@ package liarauction.client.ui;
 
 import java.awt.BorderLayout;
 import java.util.function.Consumer;
+import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import javax.swing.JPanel;
 import liarauction.common.Message;
 import liarauction.common.Phase;
@@ -38,6 +41,7 @@ public final class GamePanel extends JPanel {
         auction.clear();
         chat.clear();
         info.clear();
+        info.setTotalRounds(totalRounds);
         status.startGame(myName, opponent, startCash, totalRounds);
         chat.addSystem(opponent + " 님과 게임을 시작합니다");
     }
@@ -53,6 +57,7 @@ public final class GamePanel extends JPanel {
                 case Protocol.BROADCAST_CHAT -> chat.addChat(msg.arg(0), msg.arg(1));
                 case Protocol.START_ROUND -> {
                     status.setRound(msg.intArg(0));
+                    info.setRound(msg.intArg(0));
                     auction.showArtwork(msg.arg(1), msg.arg(2), msg.intArg(3));
                     info.addLine("--- 라운드 " + msg.arg(0) + " ---");
                 }
@@ -60,22 +65,21 @@ public final class GamePanel extends JPanel {
                     Phase phase = Phase.valueOf(msg.arg(0));
                     int secondsRemaining = msg.intArg(1);
                     status.setPhase(phase, secondsRemaining);
+                    info.setPhase(phase);
                     auction.setAuctionPhase(phase, secondsRemaining);
                 }
-                case Protocol.INSPECTION -> info.showInspection(msg.boolArg(0), msg.arg(1));
-                case Protocol.APPRAISE_RESULT -> info.showAppraisal(msg.arg(0));
+                case Protocol.ITEMS -> info.updateItems(msg.intArg(0), msg.intArg(1));
+                case Protocol.ITEM_RESULT -> info.showItemResult(msg.arg(0), msg.arg(1));
+                case Protocol.RUMOR -> info.showRumor(msg.arg(0));
                 case Protocol.UPDATE_BID -> auction.updateBid(msg.arg(0), msg.intArg(1));
                 case Protocol.BID_REJECT -> auction.showNotice("입찰 거부: " + msg.arg(0));
                 case Protocol.ROUND_END -> auction.showRoundEnd(msg.arg(0), msg.intArg(1));
-                // TODO(#13): 되팔기 창
-                case Protocol.RESALE_OFFER -> info.addLine(msg.arg(0) + " 님의 되팔기 제안: " + msg.arg(1));
-                case Protocol.RESALE_RESULT -> info.addLine("되팔기 " + msg.arg(0) + " (" + msg.arg(1) + ")");
                 case Protocol.UPDATE_CASH -> status.setCash(msg.arg(0), msg.intArg(1));
-                // TODO(#19): 결과 창
                 case Protocol.GAME_OVER -> {
                     status.stop();
                     chat.addSystem("게임 종료, 승자: " + msg.arg(0));
                     info.addLine(msg.arg(1));
+                    showGameOver(msg.arg(0), msg.arg(1));
                 }
                 case Protocol.ERROR -> chat.addSystem("오류: " + msg.arg(0));
                 default -> System.err.println("[클라이언트] 처리하지 않은 메시지: " + msg);
@@ -83,5 +87,17 @@ public final class GamePanel extends JPanel {
         } catch (IllegalArgumentException e) {
             System.err.println("[클라이언트] 메시지 처리 실패: " + msg + " (" + e.getMessage() + ")");
         }
+    }
+
+    private void showGameOver(String winner, String details) {
+        JTextArea text = new JTextArea(details, 16, 42);
+        text.setEditable(false);
+        text.setLineWrap(true);
+        text.setWrapStyleWord(true);
+        JOptionPane.showMessageDialog(
+                this,
+                new JScrollPane(text),
+                Protocol.DRAW.equals(winner) ? "게임 종료 - 무승부" : "게임 종료 - 승자: " + winner,
+                JOptionPane.INFORMATION_MESSAGE);
     }
 }

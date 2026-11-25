@@ -20,6 +20,12 @@ public final class GameConfig {
     public static final List<Integer> BID_INCREMENTS = List.of(10, 50, 100);
     /** 이 시간 동안 추가 입찰이 없으면 낙찰 (입찰 시 리셋) */
     public static final int BID_IDLE_SECONDS = 5;
+    /** 게임 시작 시 플레이어별 감정서 수 */
+    public static final int START_CERTIFICATES = 1;
+    /** 게임 시작 시 플레이어별 교란 아이템 수 */
+    public static final int START_JAMMERS = 1;
+    /** 낙찰 결과를 보여 주고 다음 라운드로 넘어가기 전 대기 시간 */
+    public static final int AUCTION_RESULT_SECONDS = 3;
     /** 닉네임 최대 길이 */
     public static final int MAX_NICKNAME_LENGTH = 12;
 
