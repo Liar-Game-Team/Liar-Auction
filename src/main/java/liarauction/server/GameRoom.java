@@ -25,9 +25,18 @@ public final class GameRoom {
 
     private final List<ClientHandler> sessions = new ArrayList<>();
     private GameState state = new GameState();
-    private final AuctionController auction = new AuctionController(this);
-    private final InfoController info = new InfoController(this);
+    private final AuctionController auction;
+    private final InfoController info;
     private boolean resetting;
+
+    public GameRoom() {
+        this(AuctionTiming.defaults());
+    }
+
+    GameRoom(AuctionTiming timing) {
+        auction = new AuctionController(this, timing);
+        info = new InfoController(this);
+    }
 
     // ===== 컨트롤러가 쓰는 메서드 =====
 

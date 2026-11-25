@@ -3,8 +3,12 @@ package liarauction.server;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import liarauction.common.GameConfig;
 import liarauction.common.Message;
+import liarauction.common.Phase;
 import liarauction.common.Protocol;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -109,6 +113,72 @@ class AuctionServerTest {
         }
     }
 
+    @Test
+    void completesEightRoundsWithBidsAndAnUnbidAuction() throws Exception {
+        server.stop();
+        server = new AuctionServer(0, new AuctionTiming(
+                Duration.ofMillis(25),
+                Duration.ofMillis(25),
+                Duration.ofMillis(25),
+                Duration.ofMillis(500),
+                Duration.ofMillis(25),
+                Duration.ofMillis(40)));
+        server.start();
+
+        try (TestClient alice = connect().login("alice");
+             TestClient bob = connect().login("bob")) {
+            assertEquals(Protocol.GAME_START, readUntil(alice, Protocol.GAME_START).command());
+            assertEquals(Protocol.GAME_START, readUntil(bob, Protocol.GAME_START).command());
+
+            for (int round = 1; round <= GameConfig.TOTAL_ROUNDS; round++) {
+                Message startA = readUntil(alice, Protocol.START_ROUND);
+                Message startB = readUntil(bob, Protocol.START_ROUND);
+                assertEquals(String.valueOf(round), startA.arg(0));
+                assertEquals(String.valueOf(round), startB.arg(0));
+                assertEquals("100", startA.arg(3));
+
+                List<Phase> phases = new ArrayList<>();
+                readUntilAuctionPhase(alice, phases);
+                readUntilAuctionPhase(bob, null);
+                assertEquals(
+                        List.of(Phase.REVEAL, Phase.INSPECTION, Phase.NEGOTIATION, Phase.AUCTION),
+                        phases);
+
+                if (round < GameConfig.TOTAL_ROUNDS) {
+                    alice.send(Message.of(Protocol.REQ_BID, 10));
+                    assertEquals(Message.of(Protocol.UPDATE_BID, "alice", 110),
+                            readUntil(alice, Protocol.UPDATE_BID));
+                    assertEquals(Message.of(
+                                    Protocol.UPDATE_CASH, "alice", 890 - ((round - 1) * 110)),
+                            readUntil(alice, Protocol.UPDATE_CASH));
+                    assertEquals(Message.of(Protocol.ROUND_END, "alice", 110),
+                            readUntil(alice, Protocol.ROUND_END));
+
+                    assertEquals(Message.of(Protocol.UPDATE_BID, "alice", 110),
+                            readUntil(bob, Protocol.UPDATE_BID));
+                    readUntil(bob, Protocol.UPDATE_CASH);
+                    assertEquals(Message.of(Protocol.ROUND_END, "alice", 110),
+                            readUntil(bob, Protocol.ROUND_END));
+                } else {
+                    assertEquals(Message.of(Protocol.ROUND_END, Protocol.NONE, 0),
+                            readUntil(alice, Protocol.ROUND_END));
+                    assertEquals(Message.of(Protocol.ROUND_END, Protocol.NONE, 0),
+                            readUntil(bob, Protocol.ROUND_END));
+                }
+            }
+
+            long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+            while (server.room().state().phase() != Phase.GAME_OVER
+                    && System.nanoTime() < deadline) {
+                Thread.sleep(5);
+            }
+            assertEquals(Phase.GAME_OVER, server.room().state().phase());
+            assertEquals(230, server.room().state().findPlayer("alice").cash());
+            assertEquals(7, server.room().state().findPlayer("alice").artworks().size());
+            assertEquals(GameConfig.START_CASH, server.room().state().findPlayer("bob").cash());
+        }
+    }
+
     private static Message readUntil(TestClient client, String command) throws IOException {
         Message message;
         do {
@@ -119,5 +189,22 @@ class AuctionServerTest {
 
     private TestClient connect() throws IOException {
         return new TestClient(server.getPort());
+    }
+
+    private static void readUntilAuctionPhase(TestClient client, List<Phase> observedPhases)
+            throws IOException {
+        while (true) {
+            Message message = client.read();
+            if (!Protocol.PHASE.equals(message.command())) {
+                continue;
+            }
+            Phase phase = Phase.valueOf(message.arg(0));
+            if (observedPhases != null) {
+                observedPhases.add(phase);
+            }
+            if (phase == Phase.AUCTION) {
+                return;
+            }
+        }
     }
 }
