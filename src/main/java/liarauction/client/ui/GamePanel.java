@@ -35,6 +35,7 @@ public final class GamePanel extends JPanel {
     }
 
     public void startGame(String myName, String opponent, int startCash, int totalRounds) {
+        auction.clear();
         chat.clear();
         info.clear();
         status.startGame(myName, opponent, startCash, totalRounds);
@@ -55,7 +56,12 @@ public final class GamePanel extends JPanel {
                     auction.showArtwork(msg.arg(1), msg.arg(2), msg.intArg(3));
                     info.addLine("--- 라운드 " + msg.arg(0) + " ---");
                 }
-                case Protocol.PHASE -> status.setPhase(Phase.valueOf(msg.arg(0)), msg.intArg(1));
+                case Protocol.PHASE -> {
+                    Phase phase = Phase.valueOf(msg.arg(0));
+                    int secondsRemaining = msg.intArg(1);
+                    status.setPhase(phase, secondsRemaining);
+                    auction.setAuctionPhase(phase, secondsRemaining);
+                }
                 case Protocol.INSPECTION -> info.showInspection(msg.boolArg(0), msg.arg(1));
                 case Protocol.APPRAISE_RESULT -> info.showAppraisal(msg.arg(0));
                 case Protocol.UPDATE_BID -> auction.updateBid(msg.arg(0), msg.intArg(1));
