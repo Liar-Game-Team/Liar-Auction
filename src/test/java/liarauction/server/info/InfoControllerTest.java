@@ -59,17 +59,19 @@ class InfoControllerTest {
             synchronized (room) {
                 room.state().setDeck(deck());
             }
+            Message ma = readUntil(a, Protocol.INSPECTION);
+            Message mb = readUntil(b, Protocol.INSPECTION);
 
             for (int round = 1; round <= GameConfig.TOTAL_ROUNDS; round++) {
-                synchronized (room) {
-                    GameState state = room.state();
-                    Artwork art = state.startNextRound();
-                    room.info().onRoundStart(art);
+                if (round > 1) {
+                    synchronized (room) {
+                        GameState state = room.state();
+                        Artwork art = state.startNextRound();
+                        room.info().onRoundStart(art);
+                    }
+                    ma = readUntil(a, Protocol.INSPECTION);
+                    mb = readUntil(b, Protocol.INSPECTION);
                 }
-                Message ma = a.read();
-                Message mb = b.read();
-                assertEquals(Protocol.INSPECTION, ma.command());
-                assertEquals(Protocol.INSPECTION, mb.command());
 
                 boolean aOfficial = ma.boolArg(0);
                 assertEquals(round % 2 == 1, aOfficial, "라운드 " + round + " 철수 감정서 여부");
@@ -83,8 +85,8 @@ class InfoControllerTest {
 
             // 감정 정보는 각자 하나씩만: 다음 메시지는 채팅이어야 함
             a.send(Message.of(Protocol.REQ_CHAT, "끝"));
-            assertEquals(Protocol.BROADCAST_CHAT, a.read().command());
-            assertEquals(Protocol.BROADCAST_CHAT, b.read().command());
+            assertEquals(Protocol.BROADCAST_CHAT, readUntil(a, Protocol.BROADCAST_CHAT).command());
+            assertEquals(Protocol.BROADCAST_CHAT, readUntil(b, Protocol.BROADCAST_CHAT).command());
         }
     }
 
@@ -95,14 +97,18 @@ class InfoControllerTest {
             a.read();
             b.read();
             GameRoom room = server.room();
+            readUntil(a, Protocol.INSPECTION);
+            readUntil(b, Protocol.INSPECTION);
             List<Artwork> deck = deck();
             synchronized (room) {
                 room.state().setDeck(deck);
-                room.info().onRoundStart(room.state().startNextRound());
+                room.info().onRoundStart(room.state().currentArtwork());
             }
+            Message aInspection = readUntil(a, Protocol.INSPECTION);
+            Message bInspection = readUntil(b, Protocol.INSPECTION);
             String value = String.valueOf(deck.get(0).realValue());
-            assertFalse(a.read().arg(1).contains(value));
-            assertFalse(b.read().arg(1).contains(value));
+            assertFalse(aInspection.arg(1).contains(value));
+            assertFalse(bInspection.arg(1).contains(value));
         }
     }
 
@@ -128,5 +134,13 @@ class InfoControllerTest {
             }
         }
         return deck;
+    }
+
+    private static Message readUntil(TestClient client, String command) throws IOException {
+        Message message;
+        do {
+            message = client.read();
+        } while (!command.equals(message.command()));
+        return message;
     }
 }
