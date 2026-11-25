@@ -42,8 +42,8 @@ class AuctionServerTest {
             String text = "100|200? 줄\n바꿈";
             a.send(Message.of(Protocol.REQ_CHAT, text));
             Message expected = Message.of(Protocol.BROADCAST_CHAT, "철수", text);
-            assertEquals(expected, a.read());
-            assertEquals(expected, b.read());
+            assertEquals(expected, readUntil(a, Protocol.BROADCAST_CHAT));
+            assertEquals(expected, readUntil(b, Protocol.BROADCAST_CHAT));
         }
     }
 
@@ -97,14 +97,24 @@ class AuctionServerTest {
                 b.read();
                 assertEquals(Protocol.GAME_START, a.read().command());
             }
-            assertEquals(Message.of(Protocol.OPPONENT_LEFT, "영희"), a.read());
+            assertEquals(Message.of(Protocol.OPPONENT_LEFT, "영희"), readUntil(a, Protocol.OPPONENT_LEFT));
 
             try (TestClient c = connect()) {
                 c.send(Message.of(Protocol.REQ_LOGIN, "영희"));
                 assertEquals(Protocol.LOGIN_OK, c.read().command());
-                assertEquals(Message.of(Protocol.GAME_START, "영희", GameConfig.START_CASH, GameConfig.TOTAL_ROUNDS), a.read());
+                assertEquals(
+                        Message.of(Protocol.GAME_START, "영희", GameConfig.START_CASH, GameConfig.TOTAL_ROUNDS),
+                        readUntil(a, Protocol.GAME_START));
             }
         }
+    }
+
+    private static Message readUntil(TestClient client, String command) throws IOException {
+        Message message;
+        do {
+            message = client.read();
+        } while (!command.equals(message.command()));
+        return message;
     }
 
     private TestClient connect() throws IOException {

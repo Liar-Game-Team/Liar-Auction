@@ -18,9 +18,8 @@ import liarauction.server.info.InfoController;
  *   <li>파트 B (정보·거래): {@link InfoController}</li>
  * </ul>
  *
- * <p>동시성: 이 클래스의 public 메서드는 모두 방({@code this})으로 동기화된다.
- * 타이머 스레드처럼 다른 스레드에서 게임 상태를 바꿀 때도 {@code synchronized (room) { ... }}
- * 안에서 해야 입찰·감정 처리와 섞이지 않는다.
+ * <p>동시성: 방 상태와 로그인 처리는 {@code this}로 동기화한다. 입찰 판정은 별도
+ * 동기화 경로로 처리해 타이머의 낙찰 콜백과 lock 순서가 뒤집히지 않게 한다.
  */
 public final class GameRoom {
 
@@ -28,6 +27,7 @@ public final class GameRoom {
     private GameState state = new GameState();
     private final AuctionController auction = new AuctionController(this);
     private final InfoController info = new InfoController(this);
+    private boolean resetting;
 
     // ===== 컨트롤러가 쓰는 메서드 =====
 
@@ -62,7 +62,30 @@ public final class GameRoom {
 
     // ===== ClientHandler가 부르는 메서드 =====
 
-    synchronized void handle(ClientHandler from, Message msg) {
+    void handle(ClientHandler from, Message msg) {
+        if (Protocol.REQ_BID.equals(msg.command())) {
+            PlayerState player;
+            synchronized (this) {
+                if (!from.isLoggedIn()) {
+                    from.send(Message.of(Protocol.ERROR, "먼저 로그인하세요"));
+                    return;
+                }
+                player = state.findPlayer(from.nickname());
+            }
+            try {
+                auction.onBid(player, msg.intArg(0));
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                from.send(Message.of(Protocol.ERROR, e.getMessage()));
+            }
+            return;
+        }
+
+        synchronized (this) {
+            handleLocked(from, msg);
+        }
+    }
+
+    private void handleLocked(ClientHandler from, Message msg) {
         if (!from.isLoggedIn()) {
             if (Protocol.REQ_LOGIN.equals(msg.command())) {
                 login(from, msg.arg(0));
@@ -78,7 +101,6 @@ public final class GameRoom {
             switch (msg.command()) {
                 case Protocol.REQ_LOGIN -> from.send(Message.of(Protocol.ERROR, "이미 로그인했습니다"));
                 case Protocol.REQ_CHAT -> broadcast(Message.of(Protocol.BROADCAST_CHAT, nickname, msg.arg(0)));
-                case Protocol.REQ_BID -> auction.onBid(player, msg.intArg(0));
                 case Protocol.REQ_APPRAISE -> info.onAppraise(player);
                 case Protocol.REQ_RESALE -> info.onResaleOffer(player, msg.intArg(0));
                 case Protocol.RESALE_ANS -> info.onResaleAnswer(player, parseAnswer(msg.arg(0)));
@@ -89,22 +111,29 @@ public final class GameRoom {
         }
     }
 
-    synchronized void leave(ClientHandler handler) {
-        if (!sessions.remove(handler)) {
-            return;
+    void leave(ClientHandler handler) {
+        String nickname;
+        boolean wasPlaying;
+        synchronized (this) {
+            if (!sessions.remove(handler)) {
+                return;
+            }
+            nickname = handler.nickname();
+            wasPlaying = state.phase() != Phase.WAITING;
+            resetting = true;
         }
-        String nickname = handler.nickname();
-        boolean wasPlaying = state.phase() != Phase.WAITING;
         if (wasPlaying) {
             auction.onGameStopped();
             info.onGameStopped();
         }
-        broadcast(Message.of(Protocol.OPPONENT_LEFT, nickname));
 
-        // 남은 사람은 대기 상태로 돌려 새 상대를 기다린다
-        state = new GameState();
-        for (ClientHandler s : sessions) {
-            state.addPlayer(s.nickname());
+        synchronized (this) {
+            broadcast(Message.of(Protocol.OPPONENT_LEFT, nickname));
+            state = new GameState();
+            for (ClientHandler session : sessions) {
+                state.addPlayer(session.nickname());
+            }
+            resetting = false;
         }
     }
 
@@ -119,6 +148,9 @@ public final class GameRoom {
     private void login(ClientHandler from, String rawNickname) {
         String nickname = rawNickname.trim();
         String error = validateNickname(nickname);
+        if (error == null && resetting) {
+            error = "방을 초기화 중입니다";
+        }
         if (error == null && state.isFull()) {
             error = "방이 가득 찼습니다";
         }

@@ -3,6 +3,7 @@ package liarauction.server;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -25,7 +26,7 @@ public final class RoundPhaseTimer implements AutoCloseable {
     private long deadlineNanos;
     private int reportedSeconds;
     private boolean started;
-    private boolean closed;
+    private volatile boolean closed;
 
     public RoundPhaseTimer(GameState game, AuctionTiming timing, Listener listener) {
         this.game = Objects.requireNonNull(game, "game");
@@ -66,6 +67,26 @@ public final class RoundPhaseTimer implements AutoCloseable {
         }
         finishAuctionPhase();
         return true;
+    }
+
+    /** Requests an early close without blocking a caller that may hold another game lock. */
+    public void requestAuctionClose() {
+        if (closed) {
+            return;
+        }
+        try {
+            scheduler.execute(() -> {
+                synchronized (RoundPhaseTimer.this) {
+                    if (!closed && started && game.phase() == Phase.AUCTION) {
+                        finishAuctionPhase();
+                    }
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            if (!closed) {
+                throw e;
+            }
+        }
     }
 
     private void startNextRound() {

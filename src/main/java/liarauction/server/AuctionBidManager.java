@@ -20,6 +20,7 @@ public final class AuctionBidManager implements AutoCloseable {
     private final Duration idleTimeout;
     private final Listener listener;
     private final ScheduledExecutorService scheduler;
+    private final Object notificationLock = new Object();
 
     private ScheduledFuture<?> idleTask;
     private Artwork artwork;
@@ -47,89 +48,109 @@ public final class AuctionBidManager implements AutoCloseable {
         this(game, Duration.ofSeconds(GameConfig.BID_IDLE_SECONDS), listener);
     }
 
-    public synchronized void openAuction(Artwork artwork, int startingPrice) {
-        ensureOpen();
-        Objects.requireNonNull(artwork, "artwork");
-        if (active) {
-            throw new IllegalStateException("이미 진행 중인 경매가 있습니다");
-        }
-        if (game.phase() != Phase.AUCTION || !artwork.equals(game.currentArtwork())) {
-            throw new IllegalStateException("현재 라운드의 경매 단계에서만 시작할 수 있습니다");
-        }
-        if (startingPrice <= 0) {
-            throw new IllegalArgumentException("시작가는 양수여야 합니다");
-        }
+    public void openAuction(Artwork artwork, int startingPrice) {
+        synchronized (notificationLock) {
+            synchronized (this) {
+                ensureOpen();
+                Objects.requireNonNull(artwork, "artwork");
+                if (active) {
+                    throw new IllegalStateException("이미 진행 중인 경매가 있습니다");
+                }
+                if (game.phase() != Phase.AUCTION || !artwork.equals(game.currentArtwork())) {
+                    throw new IllegalStateException("현재 라운드의 경매 단계에서만 시작할 수 있습니다");
+                }
+                if (startingPrice <= 0) {
+                    throw new IllegalArgumentException("시작가는 양수여야 합니다");
+                }
 
-        this.artwork = artwork;
-        currentPrice = startingPrice;
-        highestBidder = null;
-        active = true;
-        listener.onAuctionStarted(artwork.title(), artwork.artist(), startingPrice);
+                this.artwork = artwork;
+                currentPrice = startingPrice;
+                highestBidder = null;
+                active = true;
+            }
+            listener.onAuctionStarted(artwork.title(), artwork.artist(), startingPrice);
+        }
     }
 
     /** @return true if the bid was accepted */
-    public synchronized boolean placeBid(String nickname, int increment) {
+    public boolean placeBid(String nickname, int increment) {
         Objects.requireNonNull(nickname, "nickname");
-        ensureOpen();
-        if (!active || game.phase() != Phase.AUCTION) {
-            return reject(nickname, "INVALID_PHASE");
+        synchronized (notificationLock) {
+            Settlement settlement = null;
+            String rejection = null;
+            int nextPrice = 0;
+            synchronized (this) {
+                ensureOpen();
+                if (!active || game.phase() != Phase.AUCTION) {
+                    rejection = "INVALID_PHASE";
+                } else if (System.nanoTime() >= idleDeadlineNanos && idleTask != null) {
+                    settlement = finishAuction();
+                    rejection = "AUCTION_CLOSED";
+                } else {
+                    PlayerState bidder = game.findPlayer(nickname);
+                    if (bidder == null) {
+                        rejection = "UNKNOWN_PLAYER";
+                    } else if (!GameConfig.isValidBidIncrement(increment)) {
+                        rejection = "INVALID_INCREMENT";
+                    } else if (currentPrice > Integer.MAX_VALUE - increment) {
+                        rejection = "PRICE_OVERFLOW";
+                    } else {
+                        nextPrice = currentPrice + increment;
+                        if (!bidder.canAfford(nextPrice)) {
+                            rejection = "INSUFFICIENT_CASH";
+                        } else {
+                            highestBidder = bidder;
+                            currentPrice = nextPrice;
+                            armIdleTimeout();
+                        }
+                    }
+                }
+            }
+            if (settlement != null) {
+                notifySettlement(settlement);
+            }
+            if (rejection != null) {
+                listener.onBidRejected(nickname, rejection);
+                return false;
+            }
+            listener.onBidUpdated(nickname, nextPrice);
+            return true;
         }
-        if (System.nanoTime() >= idleDeadlineNanos && idleTask != null) {
-            finishAuction();
-            return reject(nickname, "AUCTION_CLOSED");
-        }
-
-        PlayerState bidder = game.findPlayer(nickname);
-        if (bidder == null) {
-            return reject(nickname, "UNKNOWN_PLAYER");
-        }
-        if (!GameConfig.isValidBidIncrement(increment)) {
-            return reject(nickname, "INVALID_INCREMENT");
-        }
-        if (currentPrice > Integer.MAX_VALUE - increment) {
-            return reject(nickname, "PRICE_OVERFLOW");
-        }
-
-        int nextPrice = currentPrice + increment;
-        if (!bidder.canAfford(nextPrice)) {
-            return reject(nickname, "INSUFFICIENT_CASH");
-        }
-
-        highestBidder = bidder;
-        currentPrice = nextPrice;
-        armIdleTimeout();
-        listener.onBidUpdated(bidder.nickname(), currentPrice);
-        return true;
     }
 
     /** Closes the current auction, for example when its maximum phase time expires. */
-    public synchronized boolean closeAuction() {
-        ensureOpen();
-        if (!active) {
-            return false;
+    public boolean closeAuction() {
+        synchronized (notificationLock) {
+            Settlement settlement;
+            synchronized (this) {
+                ensureOpen();
+                if (!active) {
+                    return false;
+                }
+                settlement = finishAuction();
+            }
+            notifySettlement(settlement);
+            return true;
         }
-        finishAuction();
-        return true;
     }
 
-    public synchronized void playerDisconnected(String nickname) {
+    public void playerDisconnected(String nickname) {
         Objects.requireNonNull(nickname, "nickname");
-        ensureOpen();
-        if (game.findPlayer(nickname) == null) {
-            throw new IllegalArgumentException("게임에 없는 플레이어: " + nickname);
+        synchronized (notificationLock) {
+            synchronized (this) {
+                ensureOpen();
+                if (game.findPlayer(nickname) == null) {
+                    throw new IllegalArgumentException("게임에 없는 플레이어: " + nickname);
+                }
+
+                game.removePlayer(nickname);
+                active = false;
+                cancelIdleTimeout();
+                game.finish();
+            }
+            listener.onOpponentLeft(nickname);
+            listener.onGameFinished();
         }
-
-        game.removePlayer(nickname);
-        active = false;
-        cancelIdleTimeout();
-        game.finish();
-        listener.onOpponentLeft(nickname);
-        listener.onGameFinished();
-    }
-
-    private boolean reject(String nickname, String reason) {
-        listener.onBidRejected(nickname, reason);
-        return false;
     }
 
     private void armIdleTimeout() {
@@ -139,36 +160,55 @@ public final class AuctionBidManager implements AutoCloseable {
                 idleTimeout.toNanos(), TimeUnit.NANOSECONDS);
     }
 
-    private synchronized void idleTimeoutReached() {
-        if (closed || !active) {
-            return;
+    private void idleTimeoutReached() {
+        synchronized (notificationLock) {
+            Settlement settlement = null;
+            synchronized (this) {
+                if (closed || !active) {
+                    return;
+                }
+                long remainingNanos = idleDeadlineNanos - System.nanoTime();
+                if (remainingNanos > 0) {
+                    idleTask = scheduler.schedule(this::idleTimeoutReached,
+                            remainingNanos, TimeUnit.NANOSECONDS);
+                    return;
+                }
+                settlement = finishAuction();
+            }
+            notifySettlement(settlement);
         }
-        long remainingNanos = idleDeadlineNanos - System.nanoTime();
-        if (remainingNanos > 0) {
-            idleTask = scheduler.schedule(this::idleTimeoutReached,
-                    remainingNanos, TimeUnit.NANOSECONDS);
-            return;
-        }
-        finishAuction();
     }
 
-    private void finishAuction() {
+    private Settlement finishAuction() {
         if (!active) {
-            return;
+            return null;
         }
         active = false;
         cancelIdleTimeout();
 
         String winner = Protocol.NONE;
         int finalPrice = 0;
+        String cashNickname = null;
+        int remainingCash = 0;
         if (highestBidder != null) {
             highestBidder.pay(currentPrice);
             highestBidder.addArtwork(artwork);
             winner = highestBidder.nickname();
             finalPrice = currentPrice;
-            listener.onCashChanged(winner, highestBidder.cash());
+            cashNickname = winner;
+            remainingCash = highestBidder.cash();
         }
-        listener.onAuctionEnded(winner, finalPrice);
+        return new Settlement(winner, finalPrice, cashNickname, remainingCash);
+    }
+
+    private void notifySettlement(Settlement settlement) {
+        if (settlement == null) {
+            return;
+        }
+        if (settlement.cashNickname() != null) {
+            listener.onCashChanged(settlement.cashNickname(), settlement.remainingCash());
+        }
+        listener.onAuctionEnded(settlement.winner(), settlement.price());
     }
 
     private void cancelIdleTimeout() {
@@ -185,12 +225,17 @@ public final class AuctionBidManager implements AutoCloseable {
     }
 
     @Override
-    public synchronized void close() {
-        if (!closed) {
-            closed = true;
-            cancelIdleTimeout();
-            scheduler.shutdownNow();
+    public void close() {
+        synchronized (this) {
+            if (!closed) {
+                closed = true;
+                cancelIdleTimeout();
+                scheduler.shutdownNow();
+            }
         }
+    }
+
+    private record Settlement(String winner, int price, String cashNickname, int remainingCash) {
     }
 
     public interface Listener {
