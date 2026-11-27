@@ -21,6 +21,8 @@ public final class InfoPanel extends JPanel {
 
     private final JTextArea infoArea = new JTextArea();
     private final JLabel inventoryLabel = new JLabel();
+    /** 히든 미션 (나만 보임), 받기 전에는 숨김 */
+    private final JTextArea missionArea = new JTextArea();
     private final JButton certificateButton = new JButton();
     private final JButton jammerButton = new JButton();
     private int certificates;
@@ -40,6 +42,14 @@ public final class InfoPanel extends JPanel {
         infoArea.setWrapStyleWord(true);
         add(new JScrollPane(infoArea), BorderLayout.CENTER);
 
+        missionArea.setFont(certificateButton.getFont());
+        missionArea.setEditable(false);
+        missionArea.setLineWrap(true);
+        missionArea.setWrapStyleWord(true);
+        missionArea.setBorder(BorderFactory.createTitledBorder("히든 미션 (나만 보임)"));
+        missionArea.setVisible(false);
+        add(missionArea, BorderLayout.NORTH);
+
         JPanel itemPanel = new JPanel(new BorderLayout(2, 2));
         itemPanel.setBorder(BorderFactory.createTitledBorder("공개 단계 사용"));
         itemPanel.add(inventoryLabel, BorderLayout.NORTH);
@@ -53,6 +63,14 @@ public final class InfoPanel extends JPanel {
         itemPanel.add(buttons, BorderLayout.CENTER);
         add(itemPanel, BorderLayout.SOUTH);
         updateInventory();
+    }
+
+    /** {@code MISSION}: 위쪽에 계속 보이게 두고 기록에도 남긴다 */
+    public void showMission(String text) {
+        missionArea.setText(text);
+        missionArea.setVisible(true);
+        revalidate();
+        append("[히든 미션] " + text);
     }
 
     public void showRumor(String text) {
@@ -100,6 +118,8 @@ public final class InfoPanel extends JPanel {
 
     public void clear() {
         infoArea.setText("");
+        missionArea.setText("");
+        missionArea.setVisible(false);
         certificates = 0;
         jammers = 0;
         round = 0;

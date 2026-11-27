@@ -80,6 +80,8 @@ public final class Protocol {
     public static final String ITEMS = "ITEMS";
     /** {@code ITEM_RESULT|item|infoText} 개인 아이템 사용 결과 */
     public static final String ITEM_RESULT = "ITEM_RESULT";
+    /** {@code MISSION|text} 히든 미션, 본인에게만 (후반 첫 라운드에 1인당 1개) */
+    public static final String MISSION = "MISSION";
     /** {@code RUMOR|infoText} 플레이어별 소문 */
     public static final String RUMOR = "RUMOR";
     /** {@code UPDATE_BID|highestBidder|currentPrice} 실시간 입찰 갱신 */
@@ -129,6 +131,7 @@ public final class Protocol {
             Map.entry(ITEMS, 2),
             Map.entry(ITEM_RESULT, 2),
             Map.entry(RUMOR, 1),
+            Map.entry(MISSION, 1),
             Map.entry(UPDATE_BID, 2),
             Map.entry(BID_REJECT, 1),
             Map.entry(ROUND_END, 2),

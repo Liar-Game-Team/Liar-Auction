@@ -2,10 +2,13 @@ package liarauction.server.info;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Random;
 import java.util.Set;
 import liarauction.common.Artwork;
 import liarauction.common.GameConfig;
@@ -17,11 +20,24 @@ import liarauction.common.PlayerState;
 import liarauction.common.Protocol;
 import liarauction.server.GameRoom;
 
-/** Part B: private items, player-specific rumors, and final settlement. */
+/** Part B: private items, player-specific rumors, hidden missions, and final settlement. */
 public final class InfoController {
+
+    /** 한 플레이어가 받은 히든 미션. 지정 미션이 아니면 target은 null */
+    public record AssignedMission(HiddenMission mission, String target) {
+
+        /** 본인에게 보내는 설명 */
+        public String text() {
+            return mission.describe(target);
+        }
+    }
 
     private final GameRoom room;
     private final InspectionGenerator inspections;
+    private final Random random;
+    /** 닉네임 → 히든 미션 (#49) */
+    private final Map<String, AssignedMission> missions = new LinkedHashMap<>();
+    private boolean missionsAssigned;
     private final Map<String, Inspection> roundRumors = new HashMap<>();
     private final Set<String> jammerUsersForThisRound = new HashSet<>();
     private final Set<String> jammerUsersForNextRound = new HashSet<>();
@@ -32,8 +48,13 @@ public final class InfoController {
     }
 
     public InfoController(GameRoom room, InspectionGenerator inspections) {
+        this(room, inspections, new Random());
+    }
+
+    public InfoController(GameRoom room, InspectionGenerator inspections, Random random) {
         this.room = Objects.requireNonNull(room, "room");
         this.inspections = Objects.requireNonNull(inspections, "inspections");
+        this.random = Objects.requireNonNull(random, "random");
     }
 
     /** Called after a round starts; jammer use from the previous round targets this round. */
@@ -50,6 +71,64 @@ public final class InfoController {
         for (PlayerState player : game.players()) {
             sendItems(player);
         }
+        // 후반 첫 라운드에 "갑자기" 히든 미션을 준다. 브레이크타임 단계(#34)가 생기면 거기서 assignMissions()를 불러도 된다
+        if (game.round() == game.breakAfterRound() + 1) {
+            assignMissions();
+        }
+    }
+
+    /**
+     * 히든 미션을 1인당 1개씩, 서로 다른 미션으로 나눠 본인에게만 보낸다 ({@code MISSION}).
+     * 한 게임에 한 번만 나눈다 (이미 나눴으면 아무것도 하지 않는다).
+     */
+    public void assignMissions() {
+        if (missionsAssigned) {
+            return;
+        }
+        missionsAssigned = true;
+        List<PlayerState> players = room.state().players();
+        List<HiddenMission> pool = new ArrayList<>(List.of(HiddenMission.values()));
+        Collections.shuffle(pool, random);
+        for (int i = 0; i < players.size(); i++) {
+            String nickname = players.get(i).nickname();
+            HiddenMission mission = pool.get(i % pool.size());
+            String target = null;
+            if (mission.needsTarget()) {
+                List<String> others = new ArrayList<>();
+                for (PlayerState p : players) {
+                    if (!p.nickname().equals(nickname)) {
+                        others.add(p.nickname());
+                    }
+                }
+                target = others.get(random.nextInt(others.size()));
+            }
+            AssignedMission assigned = new AssignedMission(mission, target);
+            missions.put(nickname, assigned);
+            room.sendTo(nickname, Message.of(Protocol.MISSION, assigned.text()));
+        }
+    }
+
+    /** 그 플레이어의 히든 미션, 아직 없으면 null */
+    public AssignedMission missionOf(String nickname) {
+        return missions.get(nickname);
+    }
+
+    /**
+     * 게임 종료 시점의 미션 보너스 (만원). 미션이 없거나, 실패했거나, 지정 대상이 게임 중 나갔으면 0.
+     */
+    public int missionBonus(PlayerState player) {
+        AssignedMission assigned = missions.get(player.nickname());
+        if (assigned == null) {
+            return 0;
+        }
+        PlayerState target = null;
+        if (assigned.mission().needsTarget()) {
+            target = room.state().findPlayer(assigned.target());
+            if (target == null) {
+                return 0;
+            }
+        }
+        return assigned.mission().achieved(player, target) ? assigned.mission().bonus() : 0;
     }
 
     /** Called during the reveal phase by {@code REQ_USE_ITEM}. */
@@ -123,11 +202,16 @@ public final class InfoController {
         }
 
         List<PlayerState> players = game.players();
-        int highestAssets = players.stream().mapToInt(PlayerState::totalAssets).max().orElse(0);
-        List<PlayerState> winners = players.stream()
-                .filter(player -> player.totalAssets() == highestAssets)
+        Map<String, Integer> finalScore = new LinkedHashMap<>();
+        for (PlayerState player : players) {
+            finalScore.put(player.nickname(), player.totalAssets() + missionBonus(player));
+        }
+        int highest = finalScore.values().stream().mapToInt(Integer::intValue).max().orElse(0);
+        List<String> winners = finalScore.entrySet().stream()
+                .filter(e -> e.getValue() == highest)
+                .map(Map.Entry::getKey)
                 .toList();
-        String winner = winners.size() == 1 ? winners.get(0).nickname() : Protocol.DRAW;
+        String winner = winners.size() == 1 ? winners.get(0) : Protocol.DRAW;
 
         StringBuilder details = new StringBuilder("최종 자산\n");
         for (PlayerState player : players) {
@@ -136,7 +220,25 @@ public final class InfoController {
                     .append(GameConfig.money(player.cash()))
                     .append(", 총 자산 ")
                     .append(GameConfig.money(player.totalAssets()))
+                    .append(", 미션 보너스 +")
+                    .append(GameConfig.money(missionBonus(player)))
+                    .append(", 최종 ")
+                    .append(GameConfig.money(finalScore.get(player.nickname())))
                     .append('\n');
+        }
+        if (!missions.isEmpty()) {
+            details.append("\n히든 미션\n");
+            for (PlayerState player : players) {
+                AssignedMission assigned = missions.get(player.nickname());
+                if (assigned == null) {
+                    continue;
+                }
+                details.append(player.nickname())
+                        .append(": ")
+                        .append(assigned.text())
+                        .append(missionBonus(player) > 0 ? " → 성공" : " → 실패")
+                        .append('\n');
+            }
         }
         details.append("\n작품 공개\n");
         for (int i = 0; i < game.deck().size(); i++) {
@@ -162,6 +264,8 @@ public final class InfoController {
         roundRumors.clear();
         jammerUsersForThisRound.clear();
         jammerUsersForNextRound.clear();
+        missions.clear();
+        missionsAssigned = false;
         finalized = false;
     }
 

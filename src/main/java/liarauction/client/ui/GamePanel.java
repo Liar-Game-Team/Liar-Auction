@@ -75,6 +75,10 @@ public final class GamePanel extends JPanel {
                 case Protocol.ITEMS -> info.updateItems(msg.intArg(0), msg.intArg(1));
                 case Protocol.ITEM_RESULT -> info.showItemResult(msg.arg(0), msg.arg(1));
                 case Protocol.RUMOR -> info.showRumor(msg.arg(0));
+                case Protocol.MISSION -> {
+                    info.showMission(msg.arg(0));
+                    chat.addSystem("히든 미션을 받았습니다. 오른쪽 위에서 확인하세요 (나만 보임)");
+                }
                 case Protocol.UPDATE_BID -> auction.updateBid(msg.arg(0), msg.intArg(1));
                 case Protocol.BID_REJECT -> auction.showNotice("입찰 거부: " + msg.arg(0));
                 case Protocol.ROUND_END -> auction.showRoundEnd(msg.arg(0), msg.intArg(1));
