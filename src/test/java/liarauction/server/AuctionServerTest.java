@@ -406,8 +406,27 @@ class AuctionServerTest {
                 }
             }
 
-            Message resultA = alice.readUntil(Protocol.GAME_OVER);
+            // 결과 줄: 순위 2줄 + 작품 8줄을 보낸 뒤 GAME_OVER
+            List<Message> players = new ArrayList<>();
+            List<Message> artworks = new ArrayList<>();
+            Message resultA;
+            while (true) {
+                Message m = alice.read();
+                if (Protocol.RESULT_PLAYER.equals(m.command())) {
+                    players.add(m);
+                } else if (Protocol.RESULT_ARTWORK.equals(m.command())) {
+                    artworks.add(m);
+                } else if (Protocol.GAME_OVER.equals(m.command())) {
+                    resultA = m;
+                    break;
+                }
+            }
             Message resultB = bob.readUntil(Protocol.GAME_OVER);
+            assertEquals(2, players.size());
+            assertEquals(GameConfig.BASE_ROUNDS, artworks.size());
+            assertEquals("1", players.get(0).arg(0));
+            assertTrue(players.get(0).intArg(6) >= players.get(1).intArg(6), "점수 높은 순");
+            assertEquals(230, players.stream().filter(m -> m.arg(1).equals("alice")).findFirst().orElseThrow().intArg(2));
             assertEquals(resultA, resultB);
             assertEquals(Phase.GAME_OVER, game.phase());
             assertEquals(230, game.findPlayer("alice").cash());

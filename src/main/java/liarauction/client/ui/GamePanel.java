@@ -1,12 +1,11 @@
 package liarauction.client.ui;
 
 import java.awt.BorderLayout;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-import javax.swing.JOptionPane;
-import javax.swing.JScrollPane;
-import javax.swing.JTextArea;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 import liarauction.common.GameConfig;
 import liarauction.common.Message;
 import liarauction.common.Phase;
@@ -26,6 +25,10 @@ public final class GamePanel extends JPanel {
     private final AuctionPanel auction;
     private final InfoPanel info;
     private final ChatPanel chat;
+    /** 게임 결과 줄 (GAME_OVER가 오면 결과 창으로) */
+    private final List<ResultDialog.PlayerRow> resultPlayers = new ArrayList<>();
+    private final List<ResultDialog.ArtworkRow> resultArtworks = new ArrayList<>();
+    private String myName = "";
 
     public GamePanel(Consumer<Message> sender) {
         super(new BorderLayout(8, 8));
@@ -40,6 +43,9 @@ public final class GamePanel extends JPanel {
     }
 
     public void startGame(String myName, List<String> players, int startCash, int totalRounds) {
+        this.myName = myName;
+        resultPlayers.clear();
+        resultArtworks.clear();
         auction.clear();
         chat.clear();
         info.clear();
@@ -87,11 +93,13 @@ public final class GamePanel extends JPanel {
                     status.removePlayer(msg.arg(0));
                     chat.addSystem(msg.arg(0) + " 님이 나갔습니다. 남은 사람끼리 계속합니다");
                 }
+                case Protocol.RESULT_PLAYER -> resultPlayers.add(ResultDialog.PlayerRow.from(msg));
+                case Protocol.RESULT_ARTWORK -> resultArtworks.add(ResultDialog.ArtworkRow.from(msg));
                 case Protocol.GAME_OVER -> {
                     status.stop();
-                    chat.addSystem("게임 종료, 승자: " + msg.arg(0));
+                    chat.addSystem("게임 종료, " + ResultDialog.winnerText(resultPlayers));
                     info.addLine(msg.arg(1));
-                    showGameOver(msg.arg(0), msg.arg(1));
+                    showResult();
                 }
                 case Protocol.ERROR -> chat.addSystem("오류: " + msg.arg(0));
                 default -> System.err.println("[클라이언트] 처리하지 않은 메시지: " + msg);
@@ -101,15 +109,12 @@ public final class GamePanel extends JPanel {
         }
     }
 
-    private void showGameOver(String winner, String details) {
-        JTextArea text = new JTextArea(details, 16, 42);
-        text.setEditable(false);
-        text.setLineWrap(true);
-        text.setWrapStyleWord(true);
-        JOptionPane.showMessageDialog(
-                this,
-                new JScrollPane(text),
-                Protocol.DRAW.equals(winner) ? "게임 종료 - 무승부" : "게임 종료 - 승자: " + winner,
-                JOptionPane.INFORMATION_MESSAGE);
+    /** 결과 창 (모달 아님). 방 화면으로 돌아가도 그대로 볼 수 있다 */
+    private void showResult() {
+        ResultDialog dialog = new ResultDialog(SwingUtilities.getWindowAncestor(this), myName,
+                List.copyOf(resultPlayers), List.copyOf(resultArtworks));
+        resultPlayers.clear();
+        resultArtworks.clear();
+        dialog.setVisible(true);
     }
 }

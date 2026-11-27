@@ -191,7 +191,10 @@ public final class InfoController {
         return roundRumors.get(nickname);
     }
 
-    /** Reveals actual artwork details and broadcasts the final asset comparison once. */
+    /**
+     * 최종 정산 (#19): 순위(현금 + 작품 실제 가치 + 미션 보너스), 작품 진위 공개, 미션 공개.
+     * {@code RESULT_PLAYER}·{@code RESULT_ARTWORK}를 보낸 뒤 {@code GAME_OVER}를 한 번 보낸다.
+     */
     public void onGameOver() {
         GameState game = room.state();
         if (!game.isOver()) {
@@ -201,57 +204,50 @@ public final class InfoController {
             return;
         }
 
-        List<PlayerState> players = game.players();
-        Map<String, Integer> finalScore = new LinkedHashMap<>();
-        for (PlayerState player : players) {
-            finalScore.put(player.nickname(), player.totalAssets() + missionBonus(player));
-        }
-        int highest = finalScore.values().stream().mapToInt(Integer::intValue).max().orElse(0);
-        List<String> winners = finalScore.entrySet().stream()
-                .filter(e -> e.getValue() == highest)
-                .map(Map.Entry::getKey)
-                .toList();
-        String winner = winners.size() == 1 ? winners.get(0) : Protocol.DRAW;
+        List<Settlement.PlayerResult> ranking = Settlement.rank(game.players(), this::missionBonus, p -> {
+            AssignedMission m = missions.get(p.nickname());
+            return m == null ? "" : m.text();
+        });
+        List<Settlement.ArtworkResult> artworks = Settlement.artworks(game);
+        String winner = Settlement.winner(ranking);
 
-        StringBuilder details = new StringBuilder("최종 자산\n");
-        for (PlayerState player : players) {
-            details.append(player.nickname())
-                    .append(": 현금 ")
-                    .append(GameConfig.money(player.cash()))
-                    .append(", 총 자산 ")
-                    .append(GameConfig.money(player.totalAssets()))
-                    .append(", 미션 보너스 +")
-                    .append(GameConfig.money(missionBonus(player)))
-                    .append(", 최종 ")
-                    .append(GameConfig.money(finalScore.get(player.nickname())))
+        // 결과 창용: 플레이어별·작품별 한 줄씩 보낸 뒤 마지막에 GAME_OVER
+        for (Settlement.PlayerResult r : ranking) {
+            room.broadcast(Message.of(Protocol.RESULT_PLAYER, r.rank(), r.nickname(), r.cash(),
+                    r.artworkValue(), r.artworkCount(), r.bonus(), r.total(), r.mission(), r.missionSuccess()));
+        }
+        for (Settlement.ArtworkResult a : artworks) {
+            room.broadcast(Message.of(Protocol.RESULT_ARTWORK,
+                    a.round(), a.title(), a.artist(), a.grade(), a.value(), a.owner()));
+        }
+
+        // 기록·로그용 요약 문장
+        StringBuilder details = new StringBuilder("순위\n");
+        for (Settlement.PlayerResult r : ranking) {
+            details.append(r.rank()).append("위 ")
+                    .append(r.nickname())
+                    .append(": 현금 ").append(GameConfig.money(r.cash()))
+                    .append(", 작품 ").append(GameConfig.money(r.artworkValue()))
+                    .append(" (").append(r.artworkCount()).append("점)")
+                    .append(", 미션 보너스 +").append(GameConfig.money(r.bonus()))
+                    .append(", 최종 ").append(GameConfig.money(r.total()))
                     .append('\n');
         }
         if (!missions.isEmpty()) {
             details.append("\n히든 미션\n");
-            for (PlayerState player : players) {
-                AssignedMission assigned = missions.get(player.nickname());
-                if (assigned == null) {
-                    continue;
+            for (Settlement.PlayerResult r : ranking) {
+                if (!r.mission().isEmpty()) {
+                    details.append(r.nickname()).append(": ").append(r.mission())
+                            .append(r.missionSuccess() ? " → 성공" : " → 실패").append('\n');
                 }
-                details.append(player.nickname())
-                        .append(": ")
-                        .append(assigned.text())
-                        .append(missionBonus(player) > 0 ? " → 성공" : " → 실패")
-                        .append('\n');
             }
         }
         details.append("\n작품 공개\n");
-        for (int i = 0; i < game.deck().size(); i++) {
-            Artwork artwork = game.deck().get(i);
-            details.append(i + 1)
-                    .append(". ")
-                    .append(artwork.title())
-                    .append(" - ")
-                    .append(artwork.grade().label())
-                    .append(", 실제 가치 ")
-                    .append(GameConfig.money(artwork.realValue()))
-                    .append(", 보유자 ")
-                    .append(ownerOf(players, artwork))
+        for (Settlement.ArtworkResult a : artworks) {
+            details.append(a.round()).append(". ")
+                    .append(a.title()).append(" - ").append(a.grade())
+                    .append(", 실제 가치 ").append(GameConfig.money(a.value()))
+                    .append(", 보유자 ").append(a.owner())
                     .append('\n');
         }
 
@@ -274,16 +270,6 @@ public final class InfoController {
                 Protocol.ITEMS,
                 player.itemCount(Item.CERTIFICATE),
                 player.itemCount(Item.JAMMER)));
-    }
-
-    private static String ownerOf(List<PlayerState> players, Artwork artwork) {
-        List<String> owners = new ArrayList<>();
-        for (PlayerState player : players) {
-            if (player.owns(artwork)) {
-                owners.add(player.nickname());
-            }
-        }
-        return owners.isEmpty() ? Protocol.NONE : String.join(", ", owners);
     }
 
     private static void requireCurrentArtwork(GameState game, Artwork artwork) {

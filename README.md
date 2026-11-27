@@ -100,7 +100,9 @@
 | `ROUND_END` | `winner\|price` | 해당 라운드 낙찰 결과 (유찰 시 `winner`=`NONE`) |
 | `UPDATE_CASH` | `nickname\|cash` | 낙찰 후 플레이어 현금 변경 |
 | `PLAYER_LEFT` | `nickname` | 게임 중 플레이어 접속 끊김 (2명 이상 남으면 계속, 2명 미만이면 `ROOM_STATE`로 방 대기 상태 복귀) |
-| `GAME_OVER` | `winner\|details` | 최종 진위 공개 및 승패 판정 (무승부 시 `winner`=`DRAW`) |
+| `RESULT_PLAYER` | `rank\|nickname\|cash\|artworkValue\|artworkCount\|bonus\|total\|mission\|missionSuccess` | 최종 순위 한 줄 (점수 높은 순, 같은 점수는 같은 순위) |
+| `RESULT_ARTWORK` | `round\|title\|artist\|grade\|value\|owner` | 작품 진위 공개 한 줄 (유찰이면 `owner`=`유찰`) |
+| `GAME_OVER` | `winner\|details` | 결과 줄을 모두 보낸 뒤 최종 결과 (1등이 여러 명이면 `winner`=`DRAW`), 클라이언트는 결과 창을 띄움 |
 | `ERROR` | `reason` | 잘못된 요청 (형식 오류, 지금 단계에서 할 수 없는 요청 등) |
 
 ---

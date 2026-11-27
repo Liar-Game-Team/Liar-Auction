@@ -94,7 +94,14 @@ public final class Protocol {
     public static final String UPDATE_CASH = "UPDATE_CASH";
     /** {@code PLAYER_LEFT|nickname} 게임 중 플레이어 접속 끊김. 2명 이상 남으면 게임은 계속된다 */
     public static final String PLAYER_LEFT = "PLAYER_LEFT";
-    /** {@code GAME_OVER|winner|details} 최종 결과, 무승부면 winner = {@link #DRAW} */
+    /**
+     * {@code RESULT_PLAYER|rank|nickname|cash|artworkValue|artworkCount|bonus|total|mission|missionSuccess}
+     * 최종 순위 한 줄 (순위 순서대로, 같은 점수는 같은 순위). 모두 보낸 뒤 {@link #GAME_OVER}
+     */
+    public static final String RESULT_PLAYER = "RESULT_PLAYER";
+    /** {@code RESULT_ARTWORK|round|title|artist|grade|value|owner} 작품 진위 공개 한 줄 (유찰이면 owner = 유찰) */
+    public static final String RESULT_ARTWORK = "RESULT_ARTWORK";
+    /** {@code GAME_OVER|winner|details} 최종 결과 (결과 줄을 다 보낸 뒤), 1등이 여러 명이면 winner = {@link #DRAW} */
     public static final String GAME_OVER = "GAME_OVER";
     /** {@code ERROR|reason} 잘못된 요청 등 */
     public static final String ERROR = "ERROR";
@@ -137,6 +144,8 @@ public final class Protocol {
             Map.entry(ROUND_END, 2),
             Map.entry(UPDATE_CASH, 2),
             Map.entry(PLAYER_LEFT, 1),
+            Map.entry(RESULT_PLAYER, 9),
+            Map.entry(RESULT_ARTWORK, 6),
             Map.entry(GAME_OVER, 2),
             Map.entry(ERROR, 1));
 

@@ -88,6 +88,20 @@ class RoomPanelTest {
     }
 
     @Test
+    void resultRowsParseAndWinnerText() {
+        ResultDialog.PlayerRow first = ResultDialog.PlayerRow.from(
+                Message.of(Protocol.RESULT_PLAYER, 1, "철수", 230, 900, 7, 100, 1230, "[큰손] 미션", true));
+        assertEquals(new ResultDialog.PlayerRow(1, "철수", 230, 900, 7, 100, 1230, "[큰손] 미션", true), first);
+        ResultDialog.PlayerRow tie = new ResultDialog.PlayerRow(1, "영희", 1230, 0, 0, 0, 1230, "", false);
+        ResultDialog.PlayerRow third = new ResultDialog.PlayerRow(3, "민수", 500, 0, 0, 0, 500, "", false);
+        assertEquals("우승: 철수", ResultDialog.winnerText(List.of(first, third)));
+        assertEquals("공동 1위: 철수, 영희", ResultDialog.winnerText(List.of(first, tie, third)));
+
+        assertEquals(new ResultDialog.ArtworkRow(2, "별밤", "김화백", "명작", 512, "유찰"),
+                ResultDialog.ArtworkRow.from(Message.of(Protocol.RESULT_ARTWORK, 2, "별밤", "김화백", "명작", 512, "유찰")));
+    }
+
+    @Test
     void statusShowsEveryPlayersCashInManwon() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             StatusPanel status = new StatusPanel();
