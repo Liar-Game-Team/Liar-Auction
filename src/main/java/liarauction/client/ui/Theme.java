@@ -17,6 +17,7 @@ import javax.swing.border.Border;
 import javax.swing.border.TitledBorder;
 import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.FontUIResource;
+import javax.swing.plaf.metal.DefaultMetalTheme;
 import javax.swing.plaf.metal.MetalLookAndFeel;
 
 /**
@@ -87,6 +88,8 @@ public final class Theme {
      */
     public static void install() {
         try {
+            // Metal 기본 색(스크롤바·체크박스·포커스 등)도 어둡게
+            MetalLookAndFeel.setCurrentTheme(new HallMetalTheme());
             UIManager.setLookAndFeel(new MetalLookAndFeel());
         } catch (Exception ignored) {
             // 기본 모양으로도 동작한다
@@ -210,6 +213,54 @@ public final class Theme {
         scroll.getViewport().setBackground(FIELD);
         scroll.setBackground(CARD);
         return scroll;
+    }
+
+    /** Metal 기본 색: 어두운 바탕에 금색 */
+    private static final class HallMetalTheme extends DefaultMetalTheme {
+        @Override
+        public String getName() {
+            return "Liar Auction Hall";
+        }
+
+        @Override
+        protected ColorUIResource getPrimary1() {
+            return new ColorUIResource(GOLD);
+        }
+
+        @Override
+        protected ColorUIResource getPrimary2() {
+            return new ColorUIResource(GOLD_DIM);
+        }
+
+        @Override
+        protected ColorUIResource getPrimary3() {
+            return new ColorUIResource(SELECTION);
+        }
+
+        @Override
+        protected ColorUIResource getSecondary1() {
+            return new ColorUIResource(GOLD_DIM);
+        }
+
+        @Override
+        protected ColorUIResource getSecondary2() {
+            return new ColorUIResource(new Color(0x3A, 0x31, 0x24));
+        }
+
+        @Override
+        protected ColorUIResource getSecondary3() {
+            return new ColorUIResource(WALL);
+        }
+
+        @Override
+        protected ColorUIResource getBlack() {
+            return new ColorUIResource(TEXT);
+        }
+
+        @Override
+        protected ColorUIResource getWhite() {
+            return new ColorUIResource(FIELD);
+        }
     }
 
     private static Border fieldBorder() {
