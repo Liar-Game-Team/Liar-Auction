@@ -395,9 +395,13 @@ class AuctionServerTest {
 
                     assertEquals(Message.of(Protocol.UPDATE_BID, "alice", 110),
                             bob.readUntil(Protocol.UPDATE_BID));
-                    bob.readUntil(Protocol.UPDATE_CASH);
-                    assertEquals(Message.of(Protocol.ROUND_END, "alice", 110),
-                            bob.readUntil(Protocol.ROUND_END));
+                    // 다른 사람(alice)의 현금은 bob에게 오지 않는다 (#58)
+                    Message m;
+                    do {
+                        m = bob.read();
+                        assertNotEquals(Protocol.UPDATE_CASH, m.command(), "다른 사람 현금이 오면 안 됨");
+                    } while (!Protocol.ROUND_END.equals(m.command()));
+                    assertEquals(Message.of(Protocol.ROUND_END, "alice", 110), m);
                 } else {
                     assertEquals(Message.of(Protocol.ROUND_END, Protocol.NONE, 0),
                             alice.readUntil(Protocol.ROUND_END));

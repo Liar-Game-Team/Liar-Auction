@@ -77,7 +77,8 @@ public final class AuctionController {
 
             @Override
             public void onCashChanged(String nickname, int cash) {
-                room.broadcast(Message.of(Protocol.UPDATE_CASH, nickname, cash));
+                // 다른 사람의 현금은 게임 중에 볼 수 없다 (#58): 본인에게만
+                room.sendTo(nickname, Message.of(Protocol.UPDATE_CASH, nickname, cash));
             }
 
             @Override

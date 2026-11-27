@@ -108,8 +108,8 @@ class RoomPanelTest {
             status.startGame("철수", List.of("철수", "영희", "민수"), 1000, 8);
             status.setCash("영희", 890);
             status.removePlayer("민수");
-            String text = labels(status).stream().filter(t -> t.startsWith("현금")).findFirst().orElseThrow();
-            assertEquals("현금 철수(나) 1000만원 · 영희 890만원", text);
+            String text = labels(status).stream().filter(t -> t.startsWith("내 현금")).findFirst().orElseThrow();
+            assertEquals("내 현금 1000만원   ·   함께하는 사람: 영희", text);
         });
     }
 

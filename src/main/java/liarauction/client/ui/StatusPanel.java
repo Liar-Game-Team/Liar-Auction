@@ -11,7 +11,7 @@ import javax.swing.Timer;
 import liarauction.common.GameConfig;
 import liarauction.common.Phase;
 
-/** 상단 상태 표시: 라운드, 단계, 남은 시간, 모든 플레이어 현금 (2~6명) */
+/** 상단 상태 표시: 라운드, 단계, 남은 시간, 내 현금, 함께하는 사람 (다른 사람 현금은 비공개) */
 public final class StatusPanel extends JPanel {
 
     private final JLabel roundLabel = new JLabel();
@@ -88,18 +88,17 @@ public final class StatusPanel extends JPanel {
     }
 
     private void updateCash() {
-        StringBuilder sb = new StringBuilder("현금 ");
-        boolean first = true;
-        for (Map.Entry<String, Integer> e : cash.entrySet()) {
-            if (!first) {
-                sb.append(" · ");
+        StringBuilder sb = new StringBuilder("내 현금 ");
+        Integer mine = cash.get(myName);
+        sb.append(mine == null ? "-" : GameConfig.money(mine));
+        StringBuilder others = new StringBuilder();
+        for (String name : cash.keySet()) {
+            if (!name.equals(myName)) {
+                others.append(others.length() == 0 ? "" : ", ").append(name);
             }
-            first = false;
-            sb.append(e.getKey());
-            if (e.getKey().equals(myName)) {
-                sb.append("(나)");
-            }
-            sb.append(' ').append(GameConfig.money(e.getValue()));
+        }
+        if (others.length() > 0) {
+            sb.append("   ·   함께하는 사람: ").append(others);
         }
         cashLabel.setText(sb.toString());
     }

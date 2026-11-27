@@ -90,7 +90,7 @@ public final class Protocol {
     public static final String BID_REJECT = "BID_REJECT";
     /** {@code ROUND_END|winner|price} 낙찰 결과, 유찰이면 winner = {@link #NONE} */
     public static final String ROUND_END = "ROUND_END";
-    /** {@code UPDATE_CASH|nickname|cash} 플레이어 현금 변경 */
+    /** {@code UPDATE_CASH|nickname|cash} 내 현금 변경, 본인에게만 (다른 사람 현금은 게임 중 비공개) */
     public static final String UPDATE_CASH = "UPDATE_CASH";
     /** {@code PLAYER_LEFT|nickname} 게임 중 플레이어 접속 끊김. 2명 이상 남으면 게임은 계속된다 */
     public static final String PLAYER_LEFT = "PLAYER_LEFT";
