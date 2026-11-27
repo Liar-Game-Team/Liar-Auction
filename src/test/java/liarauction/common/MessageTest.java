@@ -21,10 +21,16 @@ class MessageTest {
     }
 
     @Test
-    void noArgs() {
-        Message m = Message.parse("REQ_APPRAISE");
-        assertEquals(Protocol.REQ_APPRAISE, m.command());
-        assertTrue(m.args().isEmpty());
+    void newItemAndRumorMessages() {
+        Message request = Message.parse("REQ_USE_ITEM|CERTIFICATE");
+        assertEquals(Protocol.REQ_USE_ITEM, request.command());
+        assertEquals("CERTIFICATE", request.arg(0));
+        assertEquals(
+                Message.of(Protocol.ITEM_RESULT, "CERTIFICATE", "진품 판정"),
+                Message.parse("ITEM_RESULT|CERTIFICATE|진품 판정"));
+        assertEquals(
+                Message.of(Protocol.RUMOR, "가짜라는 말이 있어요."),
+                Message.parse("RUMOR|가짜라는 말이 있어요."));
     }
 
     @Test
@@ -41,11 +47,6 @@ class MessageTest {
     void emptyArg() {
         Message m = Message.of(Protocol.REQ_CHAT, "");
         assertEquals("", Message.parse(m.encode()).arg(0));
-    }
-
-    @Test
-    void boolArg() {
-        assertTrue(Message.parse("INSPECTION|true|진품 같음").boolArg(0));
     }
 
     @Test

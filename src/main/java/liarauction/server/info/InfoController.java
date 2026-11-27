@@ -1,101 +1,191 @@
 package liarauction.server.info;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import liarauction.common.Artwork;
 import liarauction.common.GameConfig;
+import liarauction.common.GameState;
+import liarauction.common.Item;
 import liarauction.common.Message;
+import liarauction.common.Phase;
 import liarauction.common.PlayerState;
 import liarauction.common.Protocol;
 import liarauction.server.GameRoom;
 
-/**
- * 파트 B: 정보·거래 (감정서·소문, 정밀 감정, 되팔기, 최종 정산).
- *
- * <p>{@link GameRoom}과 파트 A({@code AuctionController})가 아래 메서드를 방 lock 안에서 부른다.
- * 감정 정보는 {@code room.sendTo(nickname, ...)}로 플레이어별로 따로 보낸다 (진위는 서버만 보관).
- */
+/** Part B: private items, player-specific rumors, and final settlement. */
 public final class InfoController {
 
     private final GameRoom room;
     private final InspectionGenerator inspections;
-    /** 이번 라운드에 각 플레이어가 받은 감정 정보 (닉네임 → 정보) */
-    private final Map<String, Inspection> roundInspections = new HashMap<>();
+    private final Map<String, Inspection> roundRumors = new HashMap<>();
+    private final Set<String> jammerUsersForThisRound = new HashSet<>();
+    private final Set<String> jammerUsersForNextRound = new HashSet<>();
+    private boolean finalized;
 
     public InfoController(GameRoom room) {
         this(room, new InspectionGenerator());
     }
 
     public InfoController(GameRoom room, InspectionGenerator inspections) {
-        this.room = room;
-        this.inspections = inspections;
+        this.room = Objects.requireNonNull(room, "room");
+        this.inspections = Objects.requireNonNull(inspections, "inspections");
     }
 
-    /**
-     * 연결 지점 1: 라운드 시작 (파트 A가 {@code state.startNextRound()} 다음에 부름).
-     * 감정서·소문을 만들어 각 플레이어에게 자기 것만 보낸다 (#8).
-     */
+    /** Called after a round starts; jammer use from the previous round targets this round. */
     public void onRoundStart(Artwork artwork) {
-        int round = room.state().round();
-        if (round < 1) {
-            throw new IllegalStateException("라운드 시작 전입니다");
+        GameState game = room.state();
+        if (game.phase() != Phase.REVEAL || game.round() < 1) {
+            throw new IllegalStateException("공개 단계가 아닙니다");
         }
-        List<PlayerState> players = room.state().players();
-        roundInspections.clear();
-        for (int i = 0; i < players.size(); i++) {
-            String nickname = players.get(i).nickname();
-            Inspection insp = inspections.generate(artwork, isOfficialHolder(i, round));
-            roundInspections.put(nickname, insp);
-            room.sendTo(nickname, Message.of(Protocol.INSPECTION, insp.official(), insp.text()));
+        requireCurrentArtwork(game, artwork);
+        roundRumors.clear();
+        jammerUsersForThisRound.clear();
+        jammerUsersForThisRound.addAll(jammerUsersForNextRound);
+        jammerUsersForNextRound.clear();
+        for (PlayerState player : game.players()) {
+            sendItems(player);
         }
+    }
+
+    /** Called during the reveal phase by {@code REQ_USE_ITEM}. */
+    public void onUseItem(PlayerState player, Item item) {
+        if (player == null) {
+            throw new IllegalStateException("아이템을 사용할 플레이어가 없습니다");
+        }
+        Objects.requireNonNull(item, "item");
+        GameState game = room.state();
+        if (game.findPlayer(player.nickname()) != player) {
+            throw new IllegalArgumentException("게임에 없는 플레이어: " + player.nickname());
+        }
+        if (game.phase() != Phase.REVEAL) {
+            throw new IllegalStateException("아이템은 공개 단계에서만 사용할 수 있습니다");
+        }
+        if (item == Item.JAMMER && game.round() == GameConfig.TOTAL_ROUNDS) {
+            throw new IllegalStateException("교란 아이템은 마지막 라운드에서 사용할 수 없습니다");
+        }
+        if (!player.consumeItem(item)) {
+            throw new IllegalStateException("사용할 아이템이 없습니다");
+        }
+
+        if (item == Item.CERTIFICATE) {
+            Inspection certificate = inspections.generate(game.currentArtwork(), true);
+            room.sendTo(player.nickname(),
+                    Message.of(Protocol.ITEM_RESULT, item.name(), certificate.text()));
+        } else {
+            jammerUsersForNextRound.add(player.nickname());
+            room.sendTo(player.nickname(), Message.of(
+                    Protocol.ITEM_RESULT, item.name(), "다음 라운드 상대에게 거짓 소문을 전달합니다."));
+        }
+        sendItems(player);
     }
 
     /**
-     * 감정서 담당 교대: 1라운드는 먼저 들어온 플레이어(0번)가 감정서, 매 라운드 바뀐다.
-     *
-     * @param playerIndex 입장 순서 (0, 1)
-     * @param round 1부터
+     * 소문 단계: 기본은 모두 같은 소문을 받고, 지난 라운드에 교란당한 플레이어만
+     * 기본 소문과도 실제 등급과도 다른 거짓 소문을 받는다 (12주차 회의).
      */
-    static boolean isOfficialHolder(int playerIndex, int round) {
-        return playerIndex == (round - 1) % GameConfig.MAX_PLAYERS;
+    public void onRumorPhase(Artwork artwork) {
+        GameState game = room.state();
+        if (game.phase() != Phase.RUMOR) {
+            throw new IllegalStateException("소문 단계가 아닙니다");
+        }
+        requireCurrentArtwork(game, artwork);
+        roundRumors.clear();
+        Inspection common = inspections.generate(artwork, false);
+        for (PlayerState player : game.players()) {
+            Inspection rumor = common;
+            PlayerState opponent = game.opponentOf(player.nickname());
+            if (opponent != null && jammerUsersForThisRound.contains(opponent.nickname())) {
+                rumor = inspections.generateJammedRumor(artwork, common.claimedGrade());
+            }
+            roundRumors.put(player.nickname(), rumor);
+            room.sendTo(player.nickname(), Message.of(Protocol.RUMOR, rumor.text()));
+        }
     }
 
-    /** 이번 라운드에 그 플레이어가 받은 감정 정보, 없으면 null */
-    public Inspection inspectionOf(String nickname) {
-        return roundInspections.get(nickname);
+    /** The current rumor for a player, or null until the rumor phase. */
+    public Inspection rumorOf(String nickname) {
+        return roundRumors.get(nickname);
     }
 
-    /** 연결 지점 2: 낙찰 (파트 A가 부름). 되팔기 단계 준비 */
-    public void onAuctionWon(PlayerState winner, Artwork artwork, int price) {
-        // TODO(#12): 되팔기 단계 준비
-    }
-
-    /** 연결 지점 3: 마지막 라운드 종료 (파트 A가 부름) */
+    /** Reveals actual artwork details and broadcasts the final asset comparison once. */
     public void onGameOver() {
-        // TODO(#19): 최종 정산, GAME_OVER 전송
+        GameState game = room.state();
+        if (!game.isOver()) {
+            throw new IllegalStateException("게임이 종료되지 않았습니다");
+        }
+        if (finalized) {
+            return;
+        }
+
+        List<PlayerState> players = game.players();
+        int highestAssets = players.stream().mapToInt(PlayerState::totalAssets).max().orElse(0);
+        List<PlayerState> winners = players.stream()
+                .filter(player -> player.totalAssets() == highestAssets)
+                .toList();
+        String winner = winners.size() == 1 ? winners.get(0).nickname() : Protocol.DRAW;
+
+        StringBuilder details = new StringBuilder("최종 자산\n");
+        for (PlayerState player : players) {
+            details.append(player.nickname())
+                    .append(": 현금 ")
+                    .append(player.cash())
+                    .append(", 총 자산 ")
+                    .append(player.totalAssets())
+                    .append('\n');
+        }
+        details.append("\n작품 공개\n");
+        for (int i = 0; i < game.deck().size(); i++) {
+            Artwork artwork = game.deck().get(i);
+            details.append(i + 1)
+                    .append(". ")
+                    .append(artwork.title())
+                    .append(" - ")
+                    .append(artwork.grade().label())
+                    .append(", 실제 가치 ")
+                    .append(artwork.realValue())
+                    .append(", 보유자 ")
+                    .append(ownerOf(players, artwork))
+                    .append('\n');
+        }
+
+        room.broadcast(Message.of(Protocol.GAME_OVER, winner, details.toString().stripTrailing()));
+        finalized = true;
     }
 
-    /** {@code REQ_APPRAISE} */
-    public void onAppraise(PlayerState player) {
-        // TODO(#18): 정밀 감정 (게임당 1회), APPRAISE_RESULT
-        throw new IllegalStateException("정밀 감정은 아직 구현되지 않았습니다");
-    }
-
-    /** {@code REQ_RESALE|price} */
-    public void onResaleOffer(PlayerState player, int price) {
-        // TODO(#12): 되팔기 제안 → 상대에게 RESALE_OFFER
-        throw new IllegalStateException("되팔기는 아직 구현되지 않았습니다");
-    }
-
-    /** {@code RESALE_ANS|ACCEPT or REJECT} */
-    public void onResaleAnswer(PlayerState player, boolean accept) {
-        // TODO(#12): 수락 시 현금·작품 이동, RESALE_RESULT / UPDATE_CASH
-        throw new IllegalStateException("되팔기는 아직 구현되지 않았습니다");
-    }
-
-    /** 상대가 나가서 게임이 중단됐을 때 */
+    /** Clears transient state when a player leaves and the room is reset. */
     public void onGameStopped() {
-        roundInspections.clear();
+        roundRumors.clear();
+        jammerUsersForThisRound.clear();
+        jammerUsersForNextRound.clear();
+        finalized = false;
+    }
+
+    private void sendItems(PlayerState player) {
+        room.sendTo(player.nickname(), Message.of(
+                Protocol.ITEMS,
+                player.itemCount(Item.CERTIFICATE),
+                player.itemCount(Item.JAMMER)));
+    }
+
+    private static String ownerOf(List<PlayerState> players, Artwork artwork) {
+        List<String> owners = new ArrayList<>();
+        for (PlayerState player : players) {
+            if (player.owns(artwork)) {
+                owners.add(player.nickname());
+            }
+        }
+        return owners.isEmpty() ? Protocol.NONE : String.join(", ", owners);
+    }
+
+    private static void requireCurrentArtwork(GameState game, Artwork artwork) {
+        Objects.requireNonNull(artwork, "artwork");
+        if (!artwork.equals(game.currentArtwork())) {
+            throw new IllegalArgumentException("현재 라운드 작품이 아닙니다");
+        }
     }
 }

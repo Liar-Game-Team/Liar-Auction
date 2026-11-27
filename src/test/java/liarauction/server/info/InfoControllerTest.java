@@ -1,7 +1,6 @@
 package liarauction.server.info;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -12,7 +11,9 @@ import liarauction.common.Artwork;
 import liarauction.common.GameConfig;
 import liarauction.common.GameState;
 import liarauction.common.Grade;
+import liarauction.common.Item;
 import liarauction.common.Message;
+import liarauction.common.Phase;
 import liarauction.common.Protocol;
 import liarauction.server.AuctionServer;
 import liarauction.server.GameRoom;
@@ -39,98 +40,110 @@ class InfoControllerTest {
     }
 
     @Test
-    void officialHolderAlternatesEachRound() {
-        for (int round = 1; round <= GameConfig.TOTAL_ROUNDS; round++) {
-            boolean first = InfoController.isOfficialHolder(0, round);
-            boolean second = InfoController.isOfficialHolder(1, round);
-            assertNotEquals(first, second, "라운드 " + round + ": 한 명만 감정서");
-            assertEquals(round % 2 == 1, first, "홀수 라운드는 0번이 감정서");
+    void eachPlayerStartsWithItemsAndCertificateIsPrivate() throws IOException {
+        try (TestClient alice = new TestClient(server.getPort()).login("alice");
+             TestClient bob = new TestClient(server.getPort()).login("bob")) {
+            readUntil(alice, Protocol.GAME_START);
+            readUntil(bob, Protocol.GAME_START);
+
+            assertEquals(Message.of(Protocol.ITEMS, 1, 1), readUntil(alice, Protocol.ITEMS));
+            assertEquals(Message.of(Protocol.ITEMS, 1, 1), readUntil(bob, Protocol.ITEMS));
+
+            alice.send(Message.of(Protocol.REQ_USE_ITEM, Item.CERTIFICATE.name()));
+            Message result = readUntil(alice, Protocol.ITEM_RESULT);
+            assertEquals(Item.CERTIFICATE.name(), result.arg(0));
+            assertEquals(Message.of(Protocol.ITEMS, 0, 1), readUntil(alice, Protocol.ITEMS));
         }
     }
 
     @Test
-    void eachPlayerGetsOnlyOwnInspectionAndHolderRotates() throws IOException {
-        try (TestClient a = new TestClient(server.getPort()).login("철수");
-             TestClient b = new TestClient(server.getPort()).login("영희")) {
-            assertEquals(Protocol.GAME_START, a.read().command());
-            assertEquals(Protocol.GAME_START, b.read().command());
+    void jammerMakesTheOpponentsNextRoundRumorFalse() throws IOException {
+        try (TestClient alice = new TestClient(server.getPort()).login("alice");
+             TestClient bob = new TestClient(server.getPort()).login("bob")) {
+            readUntil(alice, Protocol.GAME_START);
+            readUntil(bob, Protocol.GAME_START);
+            readUntil(alice, Protocol.ITEMS);
+            readUntil(bob, Protocol.ITEMS);
 
             GameRoom room = server.room();
+            Artwork nextArtwork;
             synchronized (room) {
-                room.state().setDeck(deck());
+                GameState game = room.state();
+                game.setDeck(deck());
+                game.setPhase(Phase.REVEAL);
+                room.info().onUseItem(game.findPlayer("bob"), Item.JAMMER);
+                nextArtwork = game.startNextRound();
+                room.info().onRoundStart(nextArtwork);
+                game.setPhase(Phase.RUMOR);
+                room.info().onRumorPhase(nextArtwork);
             }
-            Message ma = readUntil(a, Protocol.INSPECTION);
-            Message mb = readUntil(b, Protocol.INSPECTION);
 
-            for (int round = 1; round <= GameConfig.TOTAL_ROUNDS; round++) {
-                if (round > 1) {
-                    synchronized (room) {
-                        GameState state = room.state();
-                        Artwork art = state.startNextRound();
-                        room.info().onRoundStart(art);
-                    }
-                    ma = readUntil(a, Protocol.INSPECTION);
-                    mb = readUntil(b, Protocol.INSPECTION);
-                }
+            Message jammerResult = readUntil(bob, Protocol.ITEM_RESULT);
+            assertEquals(Item.JAMMER.name(), jammerResult.arg(0));
+            assertEquals(Protocol.RUMOR, readUntil(alice, Protocol.RUMOR).command());
+            assertEquals(Protocol.RUMOR, readUntil(bob, Protocol.RUMOR).command());
+            synchronized (room) {
+                Grade jammed = room.info().rumorOf("alice").claimedGrade();
+                assertNotEquals(nextArtwork.grade(), jammed, "교란 소문은 항상 거짓");
+                assertNotEquals(room.info().rumorOf("bob").claimedGrade(), jammed,
+                        "교란 소문은 기본 소문과도 달라야 함");
+            }
+        }
+    }
 
-                boolean aOfficial = ma.boolArg(0);
-                assertEquals(round % 2 == 1, aOfficial, "라운드 " + round + " 철수 감정서 여부");
-                assertEquals(!aOfficial, mb.boolArg(0), "라운드 " + round + " 영희는 반대");
+    @Test
+    void everyoneHearsTheSameRumorWithoutJammer() throws IOException {
+        try (TestClient alice = new TestClient(server.getPort()).login("alice");
+             TestClient bob = new TestClient(server.getPort()).login("bob")) {
+            readUntil(alice, Protocol.GAME_START);
+            readUntil(bob, Protocol.GAME_START);
 
+            GameRoom room = server.room();
+            for (int i = 0; i < 20; i++) {
                 synchronized (room) {
-                    assertEquals(room.info().inspectionOf("철수").text(), ma.arg(1));
-                    assertEquals(room.info().inspectionOf("영희").text(), mb.arg(1));
+                    GameState game = room.state();
+                    game.setPhase(Phase.RUMOR);
+                    room.info().onRumorPhase(game.currentArtwork());
                 }
+                assertEquals(readUntil(alice, Protocol.RUMOR), readUntil(bob, Protocol.RUMOR),
+                        "교란이 없으면 모두 같은 소문");
             }
-
-            // 감정 정보는 각자 하나씩만: 다음 메시지는 채팅이어야 함
-            a.send(Message.of(Protocol.REQ_CHAT, "끝"));
-            assertEquals(Protocol.BROADCAST_CHAT, readUntil(a, Protocol.BROADCAST_CHAT).command());
-            assertEquals(Protocol.BROADCAST_CHAT, readUntil(b, Protocol.BROADCAST_CHAT).command());
         }
     }
 
     @Test
-    void textNeverRevealsRealValue() throws IOException {
-        try (TestClient a = new TestClient(server.getPort()).login("철수");
-             TestClient b = new TestClient(server.getPort()).login("영희")) {
-            a.read();
-            b.read();
-            GameRoom room = server.room();
-            readUntil(a, Protocol.INSPECTION);
-            readUntil(b, Protocol.INSPECTION);
-            List<Artwork> deck = deck();
-            synchronized (room) {
-                room.state().setDeck(deck);
-                room.info().onRoundStart(room.state().currentArtwork());
-            }
-            Message aInspection = readUntil(a, Protocol.INSPECTION);
-            Message bInspection = readUntil(b, Protocol.INSPECTION);
-            String value = String.valueOf(deck.get(0).realValue());
-            assertFalse(aInspection.arg(1).contains(value));
-            assertFalse(bInspection.arg(1).contains(value));
-        }
-    }
+    void rejectsItemsOutsideRevealAndJammerOnTheLastRound() throws IOException {
+        try (TestClient alice = new TestClient(server.getPort()).login("alice");
+             TestClient bob = new TestClient(server.getPort()).login("bob")) {
+            readUntil(alice, Protocol.GAME_START);
+            readUntil(bob, Protocol.GAME_START);
 
-    @Test
-    void rejectsBeforeFirstRound() throws IOException {
-        try (TestClient ignored = new TestClient(server.getPort()).login("철수")) {
             GameRoom room = server.room();
             synchronized (room) {
+                GameState game = room.state();
+                game.setPhase(Phase.RUMOR);
                 assertThrows(IllegalStateException.class,
-                        () -> room.info().onRoundStart(new Artwork(1, "t", "a", Grade.FAKE, 0)));
+                        () -> room.info().onUseItem(game.findPlayer("alice"), Item.CERTIFICATE));
+                assertEquals(1, game.findPlayer("alice").itemCount(Item.CERTIFICATE));
+
+                game.setDeck(deck());
+                for (int round = 1; round < GameConfig.TOTAL_ROUNDS; round++) {
+                    game.startNextRound();
+                }
+                assertThrows(IllegalStateException.class,
+                        () -> room.info().onUseItem(game.findPlayer("alice"), Item.JAMMER));
+                assertEquals(1, game.findPlayer("alice").itemCount(Item.JAMMER));
             }
         }
     }
 
-    /** 명작 2, 보통 3, 가짜 3. 가치는 다른 숫자와 헷갈리지 않게 특이한 값 */
     private static List<Artwork> deck() {
         List<Artwork> deck = new ArrayList<>();
         int id = 0;
-        for (Grade g : Grade.values()) {
-            for (int i = 0; i < g.count(); i++) {
-                int value = g == Grade.FAKE ? 0 : g.minValue() + 37 + i;
-                deck.add(new Artwork(id++, "작품" + id, "작가", g, value));
+        for (Grade grade : Grade.values()) {
+            for (int i = 0; i < grade.count(); i++) {
+                int value = grade == Grade.FAKE ? 0 : grade.minValue() + i;
+                deck.add(new Artwork(id++, "작품" + id, "작가", grade, value));
             }
         }
         return deck;

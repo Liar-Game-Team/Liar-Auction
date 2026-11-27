@@ -8,7 +8,7 @@ import liarauction.common.Artwork;
 import liarauction.common.Grade;
 
 /**
- * 감정서·소문 생성 (#7).
+ * 감정서·소문 생성 (#35/#36).
  *
  * <p>정확도만큼의 확률로 실제 등급을 알려 주고, 틀릴 때는 나머지 등급 중 하나를 고른다.
  * 실제 진위·등급은 서버만 알고, 클라이언트는 이 문장만 받는다.
@@ -35,6 +35,19 @@ public final class InspectionGenerator {
         double accuracy = official ? OFFICIAL_ACCURACY : RUMOR_ACCURACY;
         Grade claimed = random.nextDouble() < accuracy ? artwork.grade() : wrongGrade(artwork.grade());
         return new Inspection(official, claimed, describe(official, claimed));
+    }
+
+    /** Generates a guaranteed-false rumor that differs from the ordinary rumor. */
+    public Inspection generateJammedRumor(Artwork artwork, Grade ordinaryClaim) {
+        Objects.requireNonNull(artwork, "artwork");
+        Objects.requireNonNull(ordinaryClaim, "ordinaryClaim");
+        List<Grade> candidates = new ArrayList<>(List.of(Grade.values()));
+        candidates.remove(artwork.grade());
+        candidates.remove(ordinaryClaim);
+        Grade claimed = candidates.isEmpty()
+                ? wrongGrade(artwork.grade())
+                : candidates.get(random.nextInt(candidates.size()));
+        return new Inspection(false, claimed, describe(false, claimed));
     }
 
     private Grade wrongGrade(Grade actual) {

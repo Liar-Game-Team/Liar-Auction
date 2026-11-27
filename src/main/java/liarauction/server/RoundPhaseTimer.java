@@ -22,10 +22,12 @@ public final class RoundPhaseTimer implements AutoCloseable {
 
     private ScheduledFuture<?> phaseTimeout;
     private ScheduledFuture<?> countdown;
+    private ScheduledFuture<?> resultTimeout;
     private long generation;
     private long deadlineNanos;
     private int reportedSeconds;
     private boolean started;
+    private boolean resultPending;
     private volatile boolean closed;
 
     public RoundPhaseTimer(GameState game, AuctionTiming timing, Listener listener) {
@@ -62,7 +64,7 @@ public final class RoundPhaseTimer implements AutoCloseable {
     /** Ends the auction early, for example after the last bid has been idle long enough. */
     public synchronized boolean closeAuction() {
         ensureOpen();
-        if (!started || game.phase() != Phase.AUCTION) {
+        if (!started || resultPending || game.phase() != Phase.AUCTION) {
             return false;
         }
         finishAuctionPhase();
@@ -77,7 +79,7 @@ public final class RoundPhaseTimer implements AutoCloseable {
         try {
             scheduler.execute(() -> {
                 synchronized (RoundPhaseTimer.this) {
-                    if (!closed && started && game.phase() == Phase.AUCTION) {
+                    if (!closed && started && !resultPending && game.phase() == Phase.AUCTION) {
                         finishAuctionPhase();
                     }
                 }
@@ -136,22 +138,31 @@ public final class RoundPhaseTimer implements AutoCloseable {
         }
 
         switch (game.phase()) {
-            case REVEAL -> enterPhase(Phase.INSPECTION);
-            case INSPECTION -> enterPhase(Phase.NEGOTIATION);
+            case REVEAL -> enterPhase(Phase.RUMOR);
+            case RUMOR -> enterPhase(Phase.NEGOTIATION);
             case NEGOTIATION -> enterPhase(Phase.AUCTION);
             case AUCTION -> finishAuctionPhase();
-            case RESALE -> finishResalePhase();
             default -> throw new IllegalStateException("예상하지 못한 단계: " + game.phase());
         }
     }
 
     private void finishAuctionPhase() {
+        if (resultPending || game.phase() != Phase.AUCTION) {
+            return;
+        }
         cancelTimers();
+        resultPending = true;
         listener.onAuctionClosed(game.currentArtwork());
-        enterPhase(Phase.RESALE);
+        resultTimeout = scheduler.schedule(this::finishResultPhase,
+                timing.result().toNanos(), TimeUnit.NANOSECONDS);
     }
 
-    private void finishResalePhase() {
+    private synchronized void finishResultPhase() {
+        if (closed || !resultPending) {
+            return;
+        }
+        resultPending = false;
+        resultTimeout = null;
         if (game.hasNextRound()) {
             startNextRound();
         } else {
@@ -170,6 +181,10 @@ public final class RoundPhaseTimer implements AutoCloseable {
         if (countdown != null) {
             countdown.cancel(false);
             countdown = null;
+        }
+        if (resultTimeout != null) {
+            resultTimeout.cancel(false);
+            resultTimeout = null;
         }
     }
 
@@ -202,7 +217,7 @@ public final class RoundPhaseTimer implements AutoCloseable {
 
         void onTimeRemaining(int secondsRemaining);
 
-        /** Called before the resale phase so the auction result can be settled. */
+        /** Called after the auction closes so the result can be settled and displayed. */
         void onAuctionClosed(Artwork artwork);
 
         void onGameFinished();

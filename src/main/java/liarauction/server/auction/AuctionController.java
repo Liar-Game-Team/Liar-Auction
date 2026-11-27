@@ -21,7 +21,7 @@ import liarauction.server.RoundPhaseTimer;
  * <p>파트 B로 넘기는 연결 지점
  * <ol>
  *   <li>라운드 시작 → {@code room.info().onRoundStart(artwork)}</li>
- *   <li>낙찰 → {@code room.info().onAuctionWon(winner, artwork, price)}</li>
+ *   <li>소문 단계 → {@code room.info().onRumorPhase(artwork)}</li>
  *   <li>게임 종료 → {@code room.info().onGameOver()}</li>
  * </ol>
  */
@@ -31,8 +31,9 @@ public final class AuctionController {
 
     private final GameRoom room;
     private final AuctionTiming timing;
-    private RoundPhaseTimer roundTimer;
-    private AuctionBidManager bidManager;
+    /** 클라이언트·입찰 스레드도 읽으므로 volatile. 읽을 때는 지역 변수에 한 번만 담는다. */
+    private volatile RoundPhaseTimer roundTimer;
+    private volatile AuctionBidManager bidManager;
 
     public AuctionController(GameRoom room) {
         this(room, AuctionTiming.defaults());
@@ -66,14 +67,11 @@ public final class AuctionController {
             public void onAuctionEnded(String winner, int price) {
                 synchronized (room) {
                     room.broadcast(Message.of(Protocol.ROUND_END, winner, price));
-                    if (!Protocol.NONE.equals(winner)) {
-                        PlayerState player = game.findPlayer(winner);
-                        if (player != null) {
-                            room.info().onAuctionWon(player, game.currentArtwork(), price);
-                        }
-                    }
                 }
-                roundTimer.requestAuctionClose();
+                RoundPhaseTimer timer = roundTimer;
+                if (timer != null) {
+                    timer.requestAuctionClose();
+                }
             }
 
             @Override
@@ -102,11 +100,16 @@ public final class AuctionController {
 
             @Override
             public void onPhaseChanged(Phase phase, int secondsRemaining) {
+                // 입찰 lock → 방 lock 순서로 통일한다 (#44).
+                // 방 lock 안에서 openAuction을 부르면 입찰 스레드와 lock 순서가 엇갈려 교착 상태가 된다.
+                if (phase == Phase.AUCTION) {
+                    bidManager.openAuction(game.currentArtwork(), STARTING_PRICE);
+                }
                 synchronized (room) {
-                    if (phase == Phase.AUCTION) {
-                        bidManager.openAuction(game.currentArtwork(), STARTING_PRICE);
-                    }
                     room.broadcast(Message.of(Protocol.PHASE, phase.name(), secondsRemaining));
+                    if (phase == Phase.RUMOR) {
+                        room.info().onRumorPhase(game.currentArtwork());
+                    }
                 }
             }
 
@@ -135,10 +138,11 @@ public final class AuctionController {
 
     /** {@code REQ_BID|increment} */
     public void onBid(PlayerState player, int increment) {
-        if (player == null || bidManager == null) {
+        AuctionBidManager manager = bidManager;
+        if (player == null || manager == null) {
             throw new IllegalStateException("입찰할 수 있는 게임이 없습니다");
         }
-        bidManager.placeBid(player.nickname(), increment);
+        manager.placeBid(player.nickname(), increment);
     }
 
     /** 상대가 나가서 게임이 중단됐을 때. 타이머를 멈춘다. */

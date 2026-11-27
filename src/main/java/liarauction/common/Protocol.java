@@ -25,12 +25,8 @@ public final class Protocol {
     public static final String REQ_CHAT = "REQ_CHAT";
     /** {@code REQ_BID|increment} 현재가에 더할 금액 (10 / 50 / 100) */
     public static final String REQ_BID = "REQ_BID";
-    /** {@code REQ_APPRAISE} 정밀 감정 요청 (게임당 1회) */
-    public static final String REQ_APPRAISE = "REQ_APPRAISE";
-    /** {@code REQ_RESALE|price} 낙찰 작품 되팔기 제안 */
-    public static final String REQ_RESALE = "REQ_RESALE";
-    /** {@code RESALE_ANS|ACCEPT or REJECT} 되팔기 제안 응답 */
-    public static final String RESALE_ANS = "RESALE_ANS";
+    /** {@code REQ_USE_ITEM|item} 공개 단계에서 아이템 사용 */
+    public static final String REQ_USE_ITEM = "REQ_USE_ITEM";
 
     // ===== Server -> Client =====
 
@@ -46,20 +42,18 @@ public final class Protocol {
     public static final String START_ROUND = "START_ROUND";
     /** {@code PHASE|phaseName|seconds} 단계 전환 ({@link Phase} 이름), 남은 시간 */
     public static final String PHASE = "PHASE";
-    /** {@code INSPECTION|isOfficial|infoText} 감정서(true)/소문(false), 플레이어별 개별 전송 */
-    public static final String INSPECTION = "INSPECTION";
-    /** {@code APPRAISE_RESULT|infoText} 정밀 감정 결과, 요청자에게만 */
-    public static final String APPRAISE_RESULT = "APPRAISE_RESULT";
+    /** {@code ITEMS|certificates|jammers} 아이템 보유 수 */
+    public static final String ITEMS = "ITEMS";
+    /** {@code ITEM_RESULT|item|infoText} 개인 아이템 사용 결과 */
+    public static final String ITEM_RESULT = "ITEM_RESULT";
+    /** {@code RUMOR|infoText} 플레이어별 소문 */
+    public static final String RUMOR = "RUMOR";
     /** {@code UPDATE_BID|highestBidder|currentPrice} 실시간 입찰 갱신 */
     public static final String UPDATE_BID = "UPDATE_BID";
     /** {@code BID_REJECT|reason} 입찰 거부 (현금 부족 등) */
     public static final String BID_REJECT = "BID_REJECT";
     /** {@code ROUND_END|winner|price} 낙찰 결과, 유찰이면 winner = {@link #NONE} */
     public static final String ROUND_END = "ROUND_END";
-    /** {@code RESALE_OFFER|from|price} 상대의 되팔기 제안 */
-    public static final String RESALE_OFFER = "RESALE_OFFER";
-    /** {@code RESALE_RESULT|ACCEPT or REJECT|price} 되팔기 성사 여부 */
-    public static final String RESALE_RESULT = "RESALE_RESULT";
     /** {@code UPDATE_CASH|nickname|cash} 플레이어 현금 변경 */
     public static final String UPDATE_CASH = "UPDATE_CASH";
     /** {@code OPPONENT_LEFT|nickname} 상대 접속 끊김 */
@@ -71,8 +65,6 @@ public final class Protocol {
 
     // ===== 인자 값 =====
 
-    public static final String ACCEPT = "ACCEPT";
-    public static final String REJECT = "REJECT";
     /** 유찰 (낙찰자 없음) */
     public static final String NONE = "NONE";
     /** 무승부 */
@@ -82,22 +74,19 @@ public final class Protocol {
             Map.entry(REQ_LOGIN, 1),
             Map.entry(REQ_CHAT, 1),
             Map.entry(REQ_BID, 1),
-            Map.entry(REQ_APPRAISE, 0),
-            Map.entry(REQ_RESALE, 1),
-            Map.entry(RESALE_ANS, 1),
+            Map.entry(REQ_USE_ITEM, 1),
             Map.entry(LOGIN_OK, 1),
             Map.entry(LOGIN_FAIL, 1),
             Map.entry(GAME_START, 3),
             Map.entry(BROADCAST_CHAT, 2),
             Map.entry(START_ROUND, 4),
             Map.entry(PHASE, 2),
-            Map.entry(INSPECTION, 2),
-            Map.entry(APPRAISE_RESULT, 1),
+            Map.entry(ITEMS, 2),
+            Map.entry(ITEM_RESULT, 2),
+            Map.entry(RUMOR, 1),
             Map.entry(UPDATE_BID, 2),
             Map.entry(BID_REJECT, 1),
             Map.entry(ROUND_END, 2),
-            Map.entry(RESALE_OFFER, 2),
-            Map.entry(RESALE_RESULT, 2),
             Map.entry(UPDATE_CASH, 2),
             Map.entry(OPPONENT_LEFT, 1),
             Map.entry(GAME_OVER, 2),

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.Objects;
 
 /**
  * 멀티스레드 소켓 서버. 접속마다 {@link ClientHandler} 스레드를 하나씩 만든다.
@@ -12,13 +13,18 @@ import java.net.SocketException;
 public final class AuctionServer {
 
     private final int port;
-    private final GameRoom room = new GameRoom();
+    private final GameRoom room;
     private ServerSocket serverSocket;
     private Thread acceptThread;
 
     /** @param port 0이면 비어 있는 포트를 자동으로 고른다 (테스트용) */
     public AuctionServer(int port) {
+        this(port, AuctionTiming.defaults());
+    }
+
+    AuctionServer(int port, AuctionTiming timing) {
         this.port = port;
+        this.room = new GameRoom(Objects.requireNonNull(timing, "timing"));
     }
 
     /** 포트를 열고 접속 받기를 시작한다 (바로 반환). */

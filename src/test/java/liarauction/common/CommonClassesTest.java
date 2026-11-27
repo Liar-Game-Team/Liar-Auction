@@ -62,12 +62,23 @@ class CommonClassesTest {
     }
 
     @Test
+    void playerItemsAreConsumedOnce() {
+        PlayerState p = new PlayerState("철수");
+        assertEquals(1, p.itemCount(Item.CERTIFICATE));
+        assertEquals(1, p.itemCount(Item.JAMMER));
+        assertTrue(p.consumeItem(Item.CERTIFICATE));
+        assertFalse(p.consumeItem(Item.CERTIFICATE));
+        assertEquals(0, p.itemCount(Item.CERTIFICATE));
+    }
+
+    @Test
     void phaseOrder() {
         List<Phase> order = new ArrayList<>();
         for (Phase p = Phase.REVEAL; p != null; p = p.nextInRound()) {
             order.add(p);
         }
-        assertEquals(List.of(Phase.REVEAL, Phase.INSPECTION, Phase.NEGOTIATION, Phase.AUCTION, Phase.RESALE), order);
+        assertEquals(List.of(Phase.REVEAL, Phase.RUMOR, Phase.NEGOTIATION, Phase.AUCTION), order);
+        assertEquals(10, Phase.REVEAL.seconds());
         assertEquals(30, Phase.NEGOTIATION.seconds());
         assertEquals(20, Phase.AUCTION.seconds());
     }
