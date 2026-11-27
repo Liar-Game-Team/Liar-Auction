@@ -41,8 +41,8 @@ public final class MainFrame extends JFrame {
     public MainFrame() {
         super("라이어 경매");
         setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-        setSize(1100, 760);
-        setMinimumSize(new java.awt.Dimension(960, 680));
+        setSize(1120, 820);
+        setMinimumSize(new java.awt.Dimension(980, 760));
         setLocationByPlatform(true);
 
         root.add(loginPanel, LOGIN);
