@@ -84,7 +84,10 @@ public final class InfoController {
         sendItems(player);
     }
 
-    /** Generates one rumor per player and applies any jammer from the previous round. */
+    /**
+     * 소문 단계: 기본은 모두 같은 소문을 받고, 지난 라운드에 교란당한 플레이어만
+     * 기본 소문과도 실제 등급과도 다른 거짓 소문을 받는다 (12주차 회의).
+     */
     public void onRumorPhase(Artwork artwork) {
         GameState game = room.state();
         if (game.phase() != Phase.RUMOR) {
@@ -92,11 +95,12 @@ public final class InfoController {
         }
         requireCurrentArtwork(game, artwork);
         roundRumors.clear();
+        Inspection common = inspections.generate(artwork, false);
         for (PlayerState player : game.players()) {
-            Inspection rumor = inspections.generate(artwork, false);
+            Inspection rumor = common;
             PlayerState opponent = game.opponentOf(player.nickname());
             if (opponent != null && jammerUsersForThisRound.contains(opponent.nickname())) {
-                rumor = inspections.generateJammedRumor(artwork, rumor.claimedGrade());
+                rumor = inspections.generateJammedRumor(artwork, common.claimedGrade());
             }
             roundRumors.put(player.nickname(), rumor);
             room.sendTo(player.nickname(), Message.of(Protocol.RUMOR, rumor.text()));

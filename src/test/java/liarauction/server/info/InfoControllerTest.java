@@ -83,9 +83,30 @@ class InfoControllerTest {
             assertEquals(Protocol.RUMOR, readUntil(alice, Protocol.RUMOR).command());
             assertEquals(Protocol.RUMOR, readUntil(bob, Protocol.RUMOR).command());
             synchronized (room) {
-                assertNotEquals(
-                        nextArtwork.grade(),
-                        room.info().rumorOf("alice").claimedGrade());
+                Grade jammed = room.info().rumorOf("alice").claimedGrade();
+                assertNotEquals(nextArtwork.grade(), jammed, "교란 소문은 항상 거짓");
+                assertNotEquals(room.info().rumorOf("bob").claimedGrade(), jammed,
+                        "교란 소문은 기본 소문과도 달라야 함");
+            }
+        }
+    }
+
+    @Test
+    void everyoneHearsTheSameRumorWithoutJammer() throws IOException {
+        try (TestClient alice = new TestClient(server.getPort()).login("alice");
+             TestClient bob = new TestClient(server.getPort()).login("bob")) {
+            readUntil(alice, Protocol.GAME_START);
+            readUntil(bob, Protocol.GAME_START);
+
+            GameRoom room = server.room();
+            for (int i = 0; i < 20; i++) {
+                synchronized (room) {
+                    GameState game = room.state();
+                    game.setPhase(Phase.RUMOR);
+                    room.info().onRumorPhase(game.currentArtwork());
+                }
+                assertEquals(readUntil(alice, Protocol.RUMOR), readUntil(bob, Protocol.RUMOR),
+                        "교란이 없으면 모두 같은 소문");
             }
         }
     }
