@@ -2,6 +2,7 @@ package liarauction.server.auction;
 
 import java.util.Objects;
 import liarauction.common.Artwork;
+import liarauction.common.GameConfig;
 import liarauction.common.GameState;
 import liarauction.common.Message;
 import liarauction.common.Phase;
@@ -47,7 +48,7 @@ public final class AuctionController {
     /** 두 명이 모여 게임이 시작됐을 때 (GAME_START 전송 직후) */
     public void onGameStart() {
         GameState game = room.state();
-        game.setDeck(ArtworkDeckFactory.createDeck());
+        game.setDeck(ArtworkDeckFactory.createDeck(GameConfig.roundsFor(game.players().size())));
         bidManager = new AuctionBidManager(game, timing.bidIdle(), new AuctionBidManager.Listener() {
             @Override
             public void onAuctionStarted(String title, String artist, int startingPrice) {
@@ -76,12 +77,13 @@ public final class AuctionController {
 
             @Override
             public void onCashChanged(String nickname, int cash) {
-                room.broadcast(Message.of(Protocol.UPDATE_CASH, nickname, cash));
+                // 다른 사람의 현금은 게임 중에 볼 수 없다 (#58): 본인에게만
+                room.sendTo(nickname, Message.of(Protocol.UPDATE_CASH, nickname, cash));
             }
 
             @Override
             public void onOpponentLeft(String nickname) {
-                room.broadcast(Message.of(Protocol.OPPONENT_LEFT, nickname));
+                room.broadcast(Message.of(Protocol.PLAYER_LEFT, nickname));
             }
 
             @Override
@@ -130,7 +132,12 @@ public final class AuctionController {
                 synchronized (room) {
                     room.info().onGameOver();
                 }
-                bidManager.close();
+                AuctionBidManager manager = bidManager;
+                if (manager != null) {
+                    manager.close();
+                }
+                // 결과를 보낸 뒤 같은 사람들로 방 대기 상태로 돌아간다 (#45)
+                room.returnToWaitingRoom();
             }
         });
         roundTimer.start();
