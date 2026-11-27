@@ -1,6 +1,6 @@
 # 🎨 라이어 경매 (Liar Auction)
 
-> **진품인가, 가짜인가. 상대를 속이고 파악하는 1:1 심리전 네트워크 경매 게임**  
+> **진품인가, 가짜인가. 서로를 속이고 파악하는 2~6인 심리전 네트워크 경매 게임**  
 > 한성대학교 컴퓨터공학 네트워크 프로그래밍 텀프로젝트 (Java Socket & Swing) · 2조
 
 ---
@@ -42,11 +42,11 @@
 | 패키지 | 내용 | 담당 |
 | :--- | :--- | :--- |
 | `liarauction.common` | `Protocol`·`Message` (프로토콜), `Artwork`·`Grade`·`PlayerState`·`Phase`·`GameState` (공용 클래스), `GameConfig` (설정값) | 공통 |
-| `liarauction.server` | `AuctionServer` (접속 받기), `ClientHandler` (클라이언트당 스레드), `GameRoom` (로그인·채팅·접속 끊김, 메시지 분배) | 공통 |
+| `liarauction.server` | `AuctionServer` (접속 받기), `ClientHandler` (클라이언트당 스레드), `Lobby` (로그인·방 목록·방 만들기/들어가기), `GameRoom` (방 하나: 준비·시작·채팅·퇴장, 메시지 분배) | 공통 |
 | `liarauction.server.auction` | `AuctionController`: 덱 생성, 단계 타이머, 입찰 판정 | 파트 A |
 | `liarauction.server.info` | `InfoController`: 아이템, 플레이어별 소문, 최종 정산 | 파트 B |
 | `liarauction.client` | `ServerConnection` (받기 스레드 → Swing 스레드로 전달) | 공통 |
-| `liarauction.client.ui` | `MainFrame` (로그인 → 대기 → 게임), `GamePanel`·`StatusPanel`·`ChatPanel` | 공통 |
+| `liarauction.client.ui` | `MainFrame` (로그인 → 방 목록 → 방 → 게임), `RoomListPanel`·`RoomPanel`·`GamePanel`·`StatusPanel`·`ChatPanel` | 공통 |
 | | `AuctionPanel` (경매 화면) | 파트 A |
 | | `InfoPanel` (아이템 함·소문·결과 창) | 파트 B |
 
@@ -66,43 +66,61 @@
 ### 1. Client ➡️ Server
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
-| `REQ_LOGIN` | `nickname` | 대기실 입장 및 닉네임 등록 |
-| `REQ_CHAT` | `message` | 협상 채팅 메시지 전송 |
+| `REQ_LOGIN` | `nickname` | 닉네임 등록, 방 목록 화면으로 |
+| `REQ_CHAT` | `message` | 채팅 (방 목록 화면이면 방 목록 채팅, 방 안이면 그 방 채팅) |
 | `REQ_BID` | `increment` | 입찰 요청, 현재가에 더할 금액 (`10` / `50` / `100`) |
 | `REQ_USE_ITEM` | `item` | 공개 단계 아이템 사용 (`CERTIFICATE` / `JAMMER`) |
+| `REQ_ROOM_LIST` | - | 방 목록 다시 받기 (바뀔 때마다 자동으로도 옴) |
+| `REQ_CREATE_ROOM` | `name\|maxPlayers\|password` | 방 만들기 (최대 인원 2~6명, 비밀번호가 빈 문자열이면 공개방), 만든 사람이 방장 |
+| `REQ_JOIN_ROOM` | `roomId\|password` | 방 들어가기 (공개방이면 빈 비밀번호) |
+| `REQ_QUICK_JOIN` | - | 자리가 남은 대기 중 공개방에 바로 들어가기 |
+| `REQ_LEAVE_ROOM` | - | 방 나가기, 방 목록으로 |
+| `REQ_READY` | `true / false` | 방에서 준비 / 준비 취소 (방장은 필요 없음) |
+| `REQ_START` | - | 게임 시작 (방장만, 2명 이상이고 나머지가 모두 준비했을 때) |
 
 ### 2. Server ➡️ Client
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
-| `LOGIN_OK` | `nickname` | 로그인 성공, 상대 입장 대기 |
-| `LOGIN_FAIL` | `reason` | 로그인 실패 (닉네임 중복, 방이 가득 참 등) |
-| `GAME_START` | `opponent\|startCash\|totalRounds` | 두 명이 모여 게임 시작 |
+| `LOGIN_OK` | `nickname` | 로그인 성공, 방 목록 화면으로 |
+| `LOGIN_FAIL` | `reason` | 로그인 실패 (닉네임 중복, 쓸 수 없는 문자 등) |
+| `ROOM_LIST` | `rooms` | 방 목록 (방 목록 화면에 있는 사람에게). 방마다 `id,name,count,maxPlayers,locked,playing`, 방과 방은 `;`로 구분 |
+| `ROOM_JOINED` | `roomId\|name\|maxPlayers\|locked` | 방에 들어감 (만들기·들어가기·빠른 입장) |
+| `ROOM_LEFT` | - | 방에서 나와 방 목록으로 |
+| `ROOM_STATE` | `host\|players\|readyPlayers` | 방 대기 상태. 입장·퇴장·준비가 바뀔 때, 게임이 끝나 돌아올 때 전송. `players`·`readyPlayers`는 입장 순서대로 쉼표로 이은 닉네임 |
+| `GAME_START` | `players\|startCash\|totalRounds` | 게임 시작 (`players`는 쉼표로 이은 닉네임, `totalRounds`는 인원별 8 / 10 / 12) |
 | `BROADCAST_CHAT` | `sender\|message` | 전체 채팅 브로드캐스트 |
 | `START_ROUND` | `roundNum\|title\|artist\|startPrice` | 라운드 시작 및 작품 정보 공개 |
 | `PHASE` | `phaseName\|seconds` | 라운드 단계 전환 및 남은 시간 (서버 타이머 기준, `phaseName`은 `Phase` 이름) |
 | `ITEMS` | `certificates\|jammers` | 아이템 보유 수 (플레이어별 개별 전송) |
 | `ITEM_RESULT` | `item\|infoText` | 아이템 사용 결과 (사용자에게만 전송) |
-| `RUMOR` | `infoText` | 소문 (플레이어별 개별 전송) |
+| `MISSION` | `text` | 히든 미션 (후반 첫 라운드에 1인당 1개, 본인에게만) |
+| `RUMOR` | `infoText` | 소문 (플레이어별 개별 전송, 기본은 모두 같은 내용이고 교란당한 플레이어만 다른 거짓 소문) |
 | `UPDATE_BID` | `highestBidder\|currentPrice` | 실시간 입찰 최신화 |
 | `BID_REJECT` | `reason` | 입찰 거부 (현금 부족 등) |
 | `ROUND_END` | `winner\|price` | 해당 라운드 낙찰 결과 (유찰 시 `winner`=`NONE`) |
 | `UPDATE_CASH` | `nickname\|cash` | 낙찰 후 플레이어 현금 변경 |
-| `OPPONENT_LEFT` | `nickname` | 상대 접속 끊김 알림 |
-| `GAME_OVER` | `winner\|details` | 최종 진위 공개 및 승패 판정 (무승부 시 `winner`=`DRAW`) |
+| `PLAYER_LEFT` | `nickname` | 게임 중 플레이어 접속 끊김 (2명 이상 남으면 계속, 2명 미만이면 `ROOM_STATE`로 방 대기 상태 복귀) |
+| `RESULT_PLAYER` | `rank\|nickname\|cash\|artworkValue\|artworkCount\|bonus\|total\|mission\|missionSuccess` | 최종 순위 한 줄 (점수 높은 순, 같은 점수는 같은 순위) |
+| `RESULT_ARTWORK` | `round\|title\|artist\|grade\|value\|owner` | 작품 진위 공개 한 줄 (유찰이면 `owner`=`유찰`) |
+| `GAME_OVER` | `winner\|details` | 결과 줄을 모두 보낸 뒤 최종 결과 (1등이 여러 명이면 `winner`=`DRAW`), 클라이언트는 결과 창을 띄움 |
 | `ERROR` | `reason` | 잘못된 요청 (형식 오류, 지금 단계에서 할 수 없는 요청 등) |
 
 ---
 
 ## 🎮 게임 규칙 요약
 
-1. **작품 구성:** 총 8점 (명작 2점: 400~600 / 보통 3점: 150~250 / 가짜 3점: 0), 진위는 **서버만 보관**
-2. **시작 자산:** 각 플레이어 현금 1,000 보유
-3. **라운드 진행:** 공개(10초) → 소문(5초) → 협상(30초) → 경매(최대 20초) → 결과 공개(3초)
-4. **아이템:** 각 플레이어는 감정서 1장과 교란 1개를 보유하며 공개 단계에 사용할 수 있음
-5. **감정서:** 사용한 플레이어에게만 감정 결과 전송 (정확도 80%)
-6. **소문:** 플레이어별 소문 전송 (정확도 60%). 교란을 사용하면 다음 라운드 상대에게 실제 등급 및 기본 소문과 다른 100% 거짓 소문이 전달되며, 마지막 라운드에는 교란할 수 없음
-7. **경매:** 시작가 100부터 실시간 입찰, 5초간 추가 입찰이 없으면 낙찰 (입찰 시 타이머 리셋). 아무도 입찰하지 않으면 유찰. 보유 현금보다 많은 입찰은 거부
-8. **승리 조건:** 8라운드 종료 후 모든 작품의 실제 등급·가치를 공개하고, `남은 현금 + 보유 작품 실제 가치` 합산 최고자를 승자로 판정
+1. **방:** 로그인하면 방 목록. 방 이름·최대 인원(2~6명)·비밀번호(선택)를 정해 방을 만들거나, 목록에서 골라 들어가거나, 빠른 입장. 방을 만든 사람이 방장이고, 나머지가 모두 준비하면 방장이 시작. 여러 방이 동시에 게임 가능
+2. **라운드 수:** 2~4명 8라운드, 5명 10라운드, 6명 12라운드. 절반이 끝나면 브레이크타임
+3. **작품 구성:** 기본 8점 (명작 2점: 400~600만원 / 보통 3점: 150~250만원 / 가짜 3점: 0), 진위는 **서버만 보관**
+4. **시작 자산:** 각 플레이어 현금 1,000만원 (돈은 모두 만원 단위)
+5. **라운드 진행:** 공개(10초) → 소문(5초) → 협상(30초) → 경매(최대 20초) → 결과 공개(3초)
+6. **아이템:** 각 플레이어는 감정서 1장과 교란 1개를 보유하며 공개 단계에 사용할 수 있음
+7. **감정서:** 사용한 플레이어에게만 감정 결과 전송 (정확도 80%)
+8. **소문:** 모든 플레이어에게 같은 소문 (정확도 60%). 교란을 사용하면 다음 라운드에 사용한 사람을 뺀 모두(2명이면 상대, 3명 이상이면 나머지 전원)에게 실제 등급 및 기본 소문과 다른 100% 거짓 소문이 전달되며, 마지막 라운드에는 교란할 수 없음
+9. **경매:** 시작가 100만원부터 실시간 입찰, 5초간 추가 입찰이 없으면 낙찰 (입찰 시 타이머 리셋). 아무도 입찰하지 않으면 유찰. 보유 현금보다 많은 입찰은 거부
+10. **히든 미션:** 후반 첫 라운드(2~4명은 5라운드)에 1인당 1개씩 서로 다른 미션을 본인에게만 줌. 끝날 때 달성하면 보너스(80~100만원). 다른 플레이어를 지정하는 미션도 있음
+11. **승리 조건:** 마지막 라운드 종료 후 모든 작품의 실제 등급·가치와 모두의 미션을 공개하고, `남은 현금 + 보유 작품 실제 가치 + 미션 보너스` 합산 최고자를 승자로 판정
+12. **중간에 나감:** 남은 사람끼리 계속하고, 2명 미만이 되면 방 대기 상태로 돌아감. 게임이 끝나도 같은 방으로 돌아가 다시 시작 가능. 아무도 없는 방은 사라짐
 
 ---
 
