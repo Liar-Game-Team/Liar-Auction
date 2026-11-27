@@ -62,7 +62,7 @@ public final class AuctionPanel extends JPanel {
     public void showArtwork(String title, String artist, int startPrice) {
         titleLabel.setText(title);
         artistLabel.setText(artist);
-        priceLabel.setText("현재가: " + startPrice);
+        priceLabel.setText("현재가: " + GameConfig.money(startPrice));
         bidderLabel.setText("최고 입찰자: -");
         timeLabel.setText("남은 시간: -");
         noticeLabel.setText(" ");
@@ -71,7 +71,7 @@ public final class AuctionPanel extends JPanel {
 
     /** {@code UPDATE_BID} */
     public void updateBid(String bidder, int price) {
-        priceLabel.setText("현재가: " + price);
+        priceLabel.setText("현재가: " + GameConfig.money(price));
         bidderLabel.setText("최고 입찰자: " + bidder);
         noticeLabel.setText(" ");
     }
@@ -89,7 +89,7 @@ public final class AuctionPanel extends JPanel {
 
     /** {@code ROUND_END} */
     public void showRoundEnd(String winner, int price) {
-        showNotice(Protocol.NONE.equals(winner) ? "유찰" : winner + " 낙찰 (" + price + ")");
+        showNotice(Protocol.NONE.equals(winner) ? "유찰" : winner + " 낙찰 (" + GameConfig.money(price) + ")");
         setBiddingEnabled(false);
     }
 

@@ -80,7 +80,7 @@ class AuctionBidManagerTest {
         game.addPlayer("alice");
         game.addPlayer("bob");
         List<Artwork> deck = new ArrayList<>();
-        for (int i = 0; i < GameConfig.TOTAL_ROUNDS; i++) {
+        for (int i = 0; i < GameConfig.BASE_ROUNDS; i++) {
             deck.add(new Artwork(i + 1, "artwork-" + i, "artist", Grade.FAKE, 0));
         }
         game.setDeck(deck);
