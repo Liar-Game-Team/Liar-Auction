@@ -158,7 +158,7 @@ public final class InfoController {
         } else {
             jammerUsersForNextRound.add(player.nickname());
             room.sendTo(player.nickname(), Message.of(
-                    Protocol.ITEM_RESULT, item.name(), "다음 라운드 상대에게 거짓 소문을 전달합니다."));
+                    Protocol.ITEM_RESULT, item.name(), "다음 라운드에 나를 뺀 모두에게 거짓 소문이 퍼집니다."));
         }
         sendItems(player);
     }
@@ -166,6 +166,8 @@ public final class InfoController {
     /**
      * 소문 단계: 기본은 모두 같은 소문을 받고, 지난 라운드에 교란당한 플레이어만
      * 기본 소문과도 실제 등급과도 다른 거짓 소문을 받는다 (12주차 회의).
+     * 교란은 쓴 사람을 뺀 모두에게 걸린다 (2명이면 상대 한 명, 3명 이상이면 나머지 전원).
+     * 여러 명이 쓰면 쓴 사람끼리도 서로에게 걸린다.
      */
     public void onRumorPhase(Artwork artwork) {
         GameState game = room.state();
@@ -177,13 +179,22 @@ public final class InfoController {
         Inspection common = inspections.generate(artwork, false);
         for (PlayerState player : game.players()) {
             Inspection rumor = common;
-            PlayerState opponent = game.opponentOf(player.nickname());
-            if (opponent != null && jammerUsersForThisRound.contains(opponent.nickname())) {
+            if (isJammed(player.nickname())) {
                 rumor = inspections.generateJammedRumor(artwork, common.claimedGrade());
             }
             roundRumors.put(player.nickname(), rumor);
             room.sendTo(player.nickname(), Message.of(Protocol.RUMOR, rumor.text()));
         }
+    }
+
+    /** 이번 라운드에 교란당했는지: 나 말고 다른 누군가가 지난 라운드에 교란을 썼으면 true */
+    private boolean isJammed(String nickname) {
+        for (String user : jammerUsersForThisRound) {
+            if (!user.equals(nickname)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The current rumor for a player, or null until the rumor phase. */

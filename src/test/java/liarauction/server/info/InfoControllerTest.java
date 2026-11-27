@@ -98,6 +98,53 @@ class InfoControllerTest {
     }
 
     @Test
+    void jammerFromAnyPlayerHitsEveryoneElseNextRound() throws IOException {
+        try (TestClient alice = new TestClient(server.getPort()).login("alice");
+             TestClient bob = new TestClient(server.getPort()).login("bob");
+             TestClient carol = new TestClient(server.getPort()).login("carol")) {
+            int roomId = alice.createRoom("방");
+            bob.joinRoom(roomId);
+            carol.joinRoom(roomId);
+            TestClient.startGame(alice, bob, carol);
+
+            GameRoom room = server.lobby().room(roomId);
+            synchronized (room) {
+                GameState game = room.state();
+                game.setDeck(deck());
+                game.setPhase(Phase.REVEAL);
+                // 방장이 아닌 bob이 교란 → 다음 라운드에 bob을 뺀 모두(alice, carol)가 거짓 소문
+                room.info().onUseItem(game.findPlayer("bob"), Item.JAMMER);
+
+                // 쓴 라운드에는 효과 없음: 모두 같은 소문
+                game.setPhase(Phase.RUMOR);
+                room.info().onRumorPhase(game.currentArtwork());
+                assertEquals(room.info().rumorOf("bob").text(), room.info().rumorOf("alice").text());
+                assertEquals(room.info().rumorOf("bob").text(), room.info().rumorOf("carol").text());
+
+                Artwork next = game.startNextRound();
+                room.info().onRoundStart(next);
+                game.setPhase(Phase.RUMOR);
+                room.info().onRumorPhase(next);
+
+                Grade common = room.info().rumorOf("bob").claimedGrade();
+                for (String hit : List.of("alice", "carol")) {
+                    Grade jammed = room.info().rumorOf(hit).claimedGrade();
+                    assertNotEquals(next.grade(), jammed, hit + "는 거짓 소문");
+                    assertNotEquals(common, jammed, hit + "는 기본 소문과 다른 소문");
+                }
+
+                // 그다음 라운드에는 다시 모두 같은 소문
+                Artwork third = game.startNextRound();
+                room.info().onRoundStart(third);
+                game.setPhase(Phase.RUMOR);
+                room.info().onRumorPhase(third);
+                assertEquals(room.info().rumorOf("bob").text(), room.info().rumorOf("alice").text());
+                assertEquals(room.info().rumorOf("bob").text(), room.info().rumorOf("carol").text());
+            }
+        }
+    }
+
+    @Test
     void everyoneHearsTheSameRumorWithoutJammer() throws IOException {
         try (TestClient alice = new TestClient(server.getPort()).login("alice");
              TestClient bob = new TestClient(server.getPort()).login("bob")) {
