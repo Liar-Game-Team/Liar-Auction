@@ -32,6 +32,9 @@ class BidLockOrderTest {
             AtomicBoolean stop = new AtomicBoolean();
             try (TestClient alice = new TestClient(server.getPort()).login("alice");
                  TestClient bob = new TestClient(server.getPort()).login("bob")) {
+                int roomId = alice.createRoom("방");
+                bob.joinRoom(roomId);
+                TestClient.startGame(alice, bob);
                 drain(alice, stop);
                 drain(bob, stop);
                 Thread spammer = new Thread(() -> {
@@ -42,13 +45,14 @@ class BidLockOrderTest {
                 spammer.setDaemon(true);
                 spammer.start();
 
-                // 교착 상태면 state()에서 멈추고 @Timeout이 테스트를 실패시킨다
-                while (server.room().state().phase() != Phase.GAME_OVER) {
+                // 교착 상태면 state()에서 멈추고 @Timeout이 테스트를 실패시킨다.
+                // 게임이 끝나면 대기실(WAITING)로 돌아온다
+                while (server.lobby().room(roomId).state().phase() != Phase.WAITING) {
                     assertNull(ManagementFactory.getThreadMXBean().findDeadlockedThreads(),
                             game + "번째 게임에서 교착 상태");
                     Thread.sleep(5);
                 }
-                assertEquals(Phase.GAME_OVER, server.room().state().phase());
+                assertEquals(Phase.WAITING, server.lobby().room(roomId).state().phase());
             } finally {
                 stop.set(true);
                 server.stop();

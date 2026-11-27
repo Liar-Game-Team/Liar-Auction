@@ -65,7 +65,7 @@ public final class InfoController {
         if (game.phase() != Phase.REVEAL) {
             throw new IllegalStateException("아이템은 공개 단계에서만 사용할 수 있습니다");
         }
-        if (item == Item.JAMMER && game.round() == GameConfig.TOTAL_ROUNDS) {
+        if (item == Item.JAMMER && game.round() == game.totalRounds()) {
             throw new IllegalStateException("교란 아이템은 마지막 라운드에서 사용할 수 없습니다");
         }
         if (!player.consumeItem(item)) {
@@ -133,9 +133,9 @@ public final class InfoController {
         for (PlayerState player : players) {
             details.append(player.nickname())
                     .append(": 현금 ")
-                    .append(player.cash())
+                    .append(GameConfig.money(player.cash()))
                     .append(", 총 자산 ")
-                    .append(player.totalAssets())
+                    .append(GameConfig.money(player.totalAssets()))
                     .append('\n');
         }
         details.append("\n작품 공개\n");
@@ -147,7 +147,7 @@ public final class InfoController {
                     .append(" - ")
                     .append(artwork.grade().label())
                     .append(", 실제 가치 ")
-                    .append(artwork.realValue())
+                    .append(GameConfig.money(artwork.realValue()))
                     .append(", 보유자 ")
                     .append(ownerOf(players, artwork))
                     .append('\n');

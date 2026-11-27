@@ -19,7 +19,7 @@ class CommonClassesTest {
         for (Grade g : Grade.values()) {
             sum += g.count();
         }
-        assertEquals(GameConfig.TOTAL_ROUNDS, sum);
+        assertEquals(GameConfig.BASE_ROUNDS, sum);
         assertFalse(Grade.FAKE.isGenuine());
         assertTrue(Grade.MASTERPIECE.isGenuine());
     }
@@ -89,12 +89,57 @@ class CommonClassesTest {
         g.addPlayer("철수");
         assertThrows(IllegalStateException.class, () -> g.addPlayer("철수"));
         g.addPlayer("영희");
+        assertTrue(g.hasEnoughPlayers());
+        for (int i = 3; i <= GameConfig.MAX_PLAYERS; i++) {
+            assertFalse(g.isFull());
+            g.addPlayer("p" + i);
+        }
         assertTrue(g.isFull());
         assertThrows(IllegalStateException.class, () -> g.addPlayer("민수"));
+        for (int i = 3; i <= GameConfig.MAX_PLAYERS; i++) {
+            g.removePlayer("p" + i);
+        }
 
         assertEquals("영희", g.opponentOf("철수").nickname());
         g.removePlayer("영희");
         assertNull(g.opponentOf("철수"));
+    }
+
+    @Test
+    void roundsDependOnPlayerCount() {
+        assertEquals(8, GameConfig.roundsFor(2));
+        assertEquals(8, GameConfig.roundsFor(3));
+        assertEquals(8, GameConfig.roundsFor(4));
+        assertEquals(10, GameConfig.roundsFor(5));
+        assertEquals(12, GameConfig.roundsFor(6));
+        assertThrows(IllegalArgumentException.class, () -> GameConfig.roundsFor(1));
+        assertThrows(IllegalArgumentException.class, () -> GameConfig.roundsFor(7));
+
+        assertEquals(4, GameConfig.breakAfterRound(8));
+        assertEquals(5, GameConfig.breakAfterRound(10));
+        assertEquals(6, GameConfig.breakAfterRound(12));
+        assertEquals("1000만원", GameConfig.money(1000));
+    }
+
+    @Test
+    void deckSizeMustMatchPlayerCount() {
+        GameState g = new GameState();
+        for (int i = 1; i <= 5; i++) {
+            g.addPlayer("p" + i);
+        }
+        List<Artwork> eight = new ArrayList<>();
+        List<Artwork> ten = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Artwork a = new Artwork(i, "t" + i, "a", Grade.FAKE, 0);
+            ten.add(a);
+            if (i < 8) {
+                eight.add(a);
+            }
+        }
+        assertThrows(IllegalArgumentException.class, () -> g.setDeck(eight));
+        g.setDeck(ten);
+        assertEquals(10, g.totalRounds());
+        assertEquals(5, g.breakAfterRound());
     }
 
     @Test
@@ -105,12 +150,12 @@ class CommonClassesTest {
         assertThrows(IllegalArgumentException.class, () -> g.setDeck(List.of()));
 
         List<Artwork> deck = new ArrayList<>();
-        for (int i = 0; i < GameConfig.TOTAL_ROUNDS; i++) {
+        for (int i = 0; i < GameConfig.BASE_ROUNDS; i++) {
             deck.add(new Artwork(i, "t" + i, "a", Grade.FAKE, 0));
         }
         g.setDeck(deck);
 
-        for (int i = 0; i < GameConfig.TOTAL_ROUNDS; i++) {
+        for (int i = 0; i < GameConfig.BASE_ROUNDS; i++) {
             Artwork a = g.startNextRound();
             assertSame(deck.get(i), a);
             assertSame(a, g.currentArtwork());
