@@ -21,29 +21,45 @@ public final class InfoPanel extends JPanel {
 
     private final JTextArea infoArea = new JTextArea();
     private final JLabel inventoryLabel = new JLabel();
+    /** 히든 미션 (나만 보임), 받기 전에는 숨김 */
+    private final JTextArea missionArea = new JTextArea();
+    private final JScrollPane missionBox = new JScrollPane(missionArea,
+            JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
     private final JButton certificateButton = new JButton();
     private final JButton jammerButton = new JButton();
     private int certificates;
     private int jammers;
     private int round;
-    private int totalRounds = GameConfig.TOTAL_ROUNDS;
+    private int totalRounds = GameConfig.BASE_ROUNDS;
     private Phase phase = Phase.WAITING;
 
     public InfoPanel(Consumer<Message> sender) {
-        super(new BorderLayout(4, 4));
-        setBorder(BorderFactory.createTitledBorder("소문 및 아이템"));
-        setPreferredSize(new Dimension(260, 0));
+        super(new BorderLayout(4, 6));
+        Theme.card(this, "소문 및 아이템 (나만 보임)");
+        setPreferredSize(new Dimension(300, 0));
 
-        infoArea.setFont(certificateButton.getFont());
+        Theme.log(infoArea);
         infoArea.setEditable(false);
         infoArea.setLineWrap(true);
         infoArea.setWrapStyleWord(true);
-        add(new JScrollPane(infoArea), BorderLayout.CENTER);
+        add(Theme.scroll(new JScrollPane(infoArea)), BorderLayout.CENTER);
 
-        JPanel itemPanel = new JPanel(new BorderLayout(2, 2));
-        itemPanel.setBorder(BorderFactory.createTitledBorder("공개 단계 사용"));
+        Theme.log(missionArea);
+        missionArea.setForeground(Theme.GOLD_LIGHT);
+        missionArea.setEditable(false);
+        missionArea.setLineWrap(true);
+        missionArea.setWrapStyleWord(true);
+        Theme.scroll(missionBox);
+        missionBox.setBorder(Theme.goldBorder("히든 미션"));
+        missionBox.setPreferredSize(new Dimension(260, 96));
+        missionBox.setVisible(false);
+        add(missionBox, BorderLayout.NORTH);
+
+        JPanel itemPanel = Theme.clear(new JPanel(new BorderLayout(2, 4)));
+        itemPanel.setBorder(Theme.goldBorder("아이템 (작품 공개 때만)"));
+        inventoryLabel.setForeground(Theme.TEXT_DIM);
         itemPanel.add(inventoryLabel, BorderLayout.NORTH);
-        JPanel buttons = new JPanel(new GridLayout(1, 2, 4, 0));
+        JPanel buttons = Theme.clear(new JPanel(new GridLayout(1, 2, 6, 0)));
         certificateButton.addActionListener(
                 e -> sender.accept(Message.of(Protocol.REQ_USE_ITEM, Item.CERTIFICATE.name())));
         jammerButton.addActionListener(
@@ -53,6 +69,15 @@ public final class InfoPanel extends JPanel {
         itemPanel.add(buttons, BorderLayout.CENTER);
         add(itemPanel, BorderLayout.SOUTH);
         updateInventory();
+    }
+
+    /** {@code MISSION}: 위쪽에 계속 보이게 두고 기록에도 남긴다 */
+    public void showMission(String text) {
+        missionArea.setText(text);
+        missionArea.setCaretPosition(0);
+        missionBox.setVisible(true);
+        revalidate();
+        append("[히든 미션] " + text);
     }
 
     public void showRumor(String text) {
@@ -100,6 +125,8 @@ public final class InfoPanel extends JPanel {
 
     public void clear() {
         infoArea.setText("");
+        missionArea.setText("");
+        missionBox.setVisible(false);
         certificates = 0;
         jammers = 0;
         round = 0;

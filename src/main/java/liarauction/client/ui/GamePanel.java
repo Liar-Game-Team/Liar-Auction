@@ -1,11 +1,12 @@
 package liarauction.client.ui;
 
 import java.awt.BorderLayout;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
-import javax.swing.JOptionPane;
-import javax.swing.JScrollPane;
-import javax.swing.JTextArea;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+import liarauction.common.GameConfig;
 import liarauction.common.Message;
 import liarauction.common.Phase;
 import liarauction.common.Protocol;
@@ -24,26 +25,47 @@ public final class GamePanel extends JPanel {
     private final AuctionPanel auction;
     private final InfoPanel info;
     private final ChatPanel chat;
+    /** 진행자 (#40) */
+    private final HostPanel host = new HostPanel();
+    private final HostScript script = new HostScript();
+    /** 게임 결과 줄 (GAME_OVER가 오면 결과 창으로) */
+    private final List<ResultDialog.PlayerRow> resultPlayers = new ArrayList<>();
+    private final List<ResultDialog.ArtworkRow> resultArtworks = new ArrayList<>();
+    private String myName = "";
 
     public GamePanel(Consumer<Message> sender) {
-        super(new BorderLayout(8, 8));
+        super(new BorderLayout(10, 10));
+        Theme.clear(this);
+        setBorder(javax.swing.BorderFactory.createEmptyBorder(64, 14, 12, 14));
         auction = new AuctionPanel(sender);
         info = new InfoPanel(sender);
         chat = new ChatPanel(sender);
+        chat.setPreferredSize(new java.awt.Dimension(0, 150));
 
         add(status, BorderLayout.NORTH);
-        add(auction, BorderLayout.CENTER);
+        // 가운데: 위에는 진행자, 아래에는 경매 작품 카드
+        JPanel stage = Theme.clear(new JPanel(new BorderLayout(0, 8)));
+        stage.add(host, BorderLayout.NORTH);
+        stage.add(auction, BorderLayout.CENTER);
+        add(stage, BorderLayout.CENTER);
         add(info, BorderLayout.EAST);
         add(chat, BorderLayout.SOUTH);
     }
 
-    public void startGame(String myName, String opponent, int startCash, int totalRounds) {
+    public void startGame(String myName, List<String> players, int startCash, int totalRounds) {
+        this.myName = myName;
+        resultPlayers.clear();
+        resultArtworks.clear();
         auction.clear();
         chat.clear();
         info.clear();
         info.setTotalRounds(totalRounds);
-        status.startGame(myName, opponent, startCash, totalRounds);
-        chat.addSystem(opponent + " 님과 게임을 시작합니다");
+        status.startGame(myName, players, startCash, totalRounds);
+        host.clear();
+        host.say(script.welcome(players.size(), totalRounds));
+        chat.addSystem(players.size() + "명 게임 시작 (" + String.join(", ", players) + "), 총 "
+                + totalRounds + "라운드, 브레이크타임은 "
+                + GameConfig.breakAfterRound(totalRounds) + "라운드 뒤");
     }
 
     public void stop() {
@@ -52,6 +74,7 @@ public final class GamePanel extends JPanel {
 
     /** {@code GAME_START} 이후 받는 메시지 처리 */
     public void handle(Message msg) {
+        host.say(script.lineFor(msg));
         try {
             switch (msg.command()) {
                 case Protocol.BROADCAST_CHAT -> chat.addChat(msg.arg(0), msg.arg(1));
@@ -71,15 +94,25 @@ public final class GamePanel extends JPanel {
                 case Protocol.ITEMS -> info.updateItems(msg.intArg(0), msg.intArg(1));
                 case Protocol.ITEM_RESULT -> info.showItemResult(msg.arg(0), msg.arg(1));
                 case Protocol.RUMOR -> info.showRumor(msg.arg(0));
+                case Protocol.MISSION -> {
+                    info.showMission(msg.arg(0));
+                    chat.addSystem("히든 미션을 받았습니다. 오른쪽 위에서 확인하세요 (나만 보임)");
+                }
                 case Protocol.UPDATE_BID -> auction.updateBid(msg.arg(0), msg.intArg(1));
                 case Protocol.BID_REJECT -> auction.showNotice("입찰 거부: " + msg.arg(0));
                 case Protocol.ROUND_END -> auction.showRoundEnd(msg.arg(0), msg.intArg(1));
                 case Protocol.UPDATE_CASH -> status.setCash(msg.arg(0), msg.intArg(1));
+                case Protocol.PLAYER_LEFT -> {
+                    status.removePlayer(msg.arg(0));
+                    chat.addSystem(msg.arg(0) + " 님이 나갔습니다. 남은 사람끼리 계속합니다");
+                }
+                case Protocol.RESULT_PLAYER -> resultPlayers.add(ResultDialog.PlayerRow.from(msg));
+                case Protocol.RESULT_ARTWORK -> resultArtworks.add(ResultDialog.ArtworkRow.from(msg));
                 case Protocol.GAME_OVER -> {
                     status.stop();
-                    chat.addSystem("게임 종료, 승자: " + msg.arg(0));
+                    chat.addSystem("게임 종료, " + ResultDialog.winnerText(resultPlayers));
                     info.addLine(msg.arg(1));
-                    showGameOver(msg.arg(0), msg.arg(1));
+                    showResult();
                 }
                 case Protocol.ERROR -> chat.addSystem("오류: " + msg.arg(0));
                 default -> System.err.println("[클라이언트] 처리하지 않은 메시지: " + msg);
@@ -89,15 +122,12 @@ public final class GamePanel extends JPanel {
         }
     }
 
-    private void showGameOver(String winner, String details) {
-        JTextArea text = new JTextArea(details, 16, 42);
-        text.setEditable(false);
-        text.setLineWrap(true);
-        text.setWrapStyleWord(true);
-        JOptionPane.showMessageDialog(
-                this,
-                new JScrollPane(text),
-                Protocol.DRAW.equals(winner) ? "게임 종료 - 무승부" : "게임 종료 - 승자: " + winner,
-                JOptionPane.INFORMATION_MESSAGE);
+    /** 결과 창 (모달 아님). 방 화면으로 돌아가도 그대로 볼 수 있다 */
+    private void showResult() {
+        ResultDialog dialog = new ResultDialog(SwingUtilities.getWindowAncestor(this), myName,
+                List.copyOf(resultPlayers), List.copyOf(resultArtworks));
+        resultPlayers.clear();
+        resultArtworks.clear();
+        dialog.setVisible(true);
     }
 }
