@@ -25,6 +25,9 @@ public final class GamePanel extends JPanel {
     private final AuctionPanel auction;
     private final InfoPanel info;
     private final ChatPanel chat;
+    /** 진행자 (#40) */
+    private final HostPanel host = new HostPanel();
+    private final HostScript script = new HostScript();
     /** 게임 결과 줄 (GAME_OVER가 오면 결과 창으로) */
     private final List<ResultDialog.PlayerRow> resultPlayers = new ArrayList<>();
     private final List<ResultDialog.ArtworkRow> resultArtworks = new ArrayList<>();
@@ -37,9 +40,14 @@ public final class GamePanel extends JPanel {
         auction = new AuctionPanel(sender);
         info = new InfoPanel(sender);
         chat = new ChatPanel(sender);
+        chat.setPreferredSize(new java.awt.Dimension(0, 150));
 
         add(status, BorderLayout.NORTH);
-        add(auction, BorderLayout.CENTER);
+        // 가운데: 위에는 진행자, 아래에는 경매 작품 카드
+        JPanel stage = Theme.clear(new JPanel(new BorderLayout(0, 8)));
+        stage.add(host, BorderLayout.NORTH);
+        stage.add(auction, BorderLayout.CENTER);
+        add(stage, BorderLayout.CENTER);
         add(info, BorderLayout.EAST);
         add(chat, BorderLayout.SOUTH);
     }
@@ -53,6 +61,8 @@ public final class GamePanel extends JPanel {
         info.clear();
         info.setTotalRounds(totalRounds);
         status.startGame(myName, players, startCash, totalRounds);
+        host.clear();
+        host.say(script.welcome(players.size(), totalRounds));
         chat.addSystem(players.size() + "명 게임 시작 (" + String.join(", ", players) + "), 총 "
                 + totalRounds + "라운드, 브레이크타임은 "
                 + GameConfig.breakAfterRound(totalRounds) + "라운드 뒤");
@@ -64,6 +74,7 @@ public final class GamePanel extends JPanel {
 
     /** {@code GAME_START} 이후 받는 메시지 처리 */
     public void handle(Message msg) {
+        host.say(script.lineFor(msg));
         try {
             switch (msg.command()) {
                 case Protocol.BROADCAST_CHAT -> chat.addChat(msg.arg(0), msg.arg(1));
