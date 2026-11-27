@@ -19,17 +19,23 @@ public final class ChatPanel extends JPanel {
     private final JTextField inputField = new JTextField();
 
     public ChatPanel(Consumer<Message> sender) {
+        this(sender, "협상 채팅");
+    }
+
+    /** @param title 테두리 제목 (방 목록 채팅, 방 채팅 등) */
+    public ChatPanel(Consumer<Message> sender, String title) {
         super(new BorderLayout(4, 4));
-        setBorder(BorderFactory.createTitledBorder("협상 채팅"));
+        Theme.card(this, title);
         setPreferredSize(new Dimension(0, 180));
 
-        logArea.setFont(inputField.getFont());
+        Theme.log(logArea);
         logArea.setEditable(false);
         logArea.setLineWrap(true);
-        add(new JScrollPane(logArea), BorderLayout.CENTER);
+        logArea.setWrapStyleWord(true);
+        add(Theme.scroll(new JScrollPane(logArea)), BorderLayout.CENTER);
 
         JButton sendButton = new JButton("보내기");
-        JPanel input = new JPanel(new BorderLayout(4, 0));
+        JPanel input = Theme.clear(new JPanel(new BorderLayout(6, 0)));
         input.add(inputField, BorderLayout.CENTER);
         input.add(sendButton, BorderLayout.EAST);
         add(input, BorderLayout.SOUTH);
