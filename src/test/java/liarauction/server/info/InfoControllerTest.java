@@ -43,8 +43,9 @@ class InfoControllerTest {
     void eachPlayerStartsWithItemsAndCertificateIsPrivate() throws IOException {
         try (TestClient alice = new TestClient(server.getPort()).login("alice");
              TestClient bob = new TestClient(server.getPort()).login("bob")) {
-            readUntil(alice, Protocol.GAME_START);
-            readUntil(bob, Protocol.GAME_START);
+            int roomId = alice.createRoom("방");
+            bob.joinRoom(roomId);
+            TestClient.startGame(alice, bob);
 
             assertEquals(Message.of(Protocol.ITEMS, 1, 1), readUntil(alice, Protocol.ITEMS));
             assertEquals(Message.of(Protocol.ITEMS, 1, 1), readUntil(bob, Protocol.ITEMS));
@@ -60,12 +61,13 @@ class InfoControllerTest {
     void jammerMakesTheOpponentsNextRoundRumorFalse() throws IOException {
         try (TestClient alice = new TestClient(server.getPort()).login("alice");
              TestClient bob = new TestClient(server.getPort()).login("bob")) {
-            readUntil(alice, Protocol.GAME_START);
-            readUntil(bob, Protocol.GAME_START);
+            int roomId = alice.createRoom("방");
+            bob.joinRoom(roomId);
+            TestClient.startGame(alice, bob);
             readUntil(alice, Protocol.ITEMS);
             readUntil(bob, Protocol.ITEMS);
 
-            GameRoom room = server.room();
+            GameRoom room = server.lobby().room(roomId);
             Artwork nextArtwork;
             synchronized (room) {
                 GameState game = room.state();
@@ -95,10 +97,11 @@ class InfoControllerTest {
     void everyoneHearsTheSameRumorWithoutJammer() throws IOException {
         try (TestClient alice = new TestClient(server.getPort()).login("alice");
              TestClient bob = new TestClient(server.getPort()).login("bob")) {
-            readUntil(alice, Protocol.GAME_START);
-            readUntil(bob, Protocol.GAME_START);
+            int roomId = alice.createRoom("방");
+            bob.joinRoom(roomId);
+            TestClient.startGame(alice, bob);
 
-            GameRoom room = server.room();
+            GameRoom room = server.lobby().room(roomId);
             for (int i = 0; i < 20; i++) {
                 synchronized (room) {
                     GameState game = room.state();
@@ -115,10 +118,11 @@ class InfoControllerTest {
     void rejectsItemsOutsideRevealAndJammerOnTheLastRound() throws IOException {
         try (TestClient alice = new TestClient(server.getPort()).login("alice");
              TestClient bob = new TestClient(server.getPort()).login("bob")) {
-            readUntil(alice, Protocol.GAME_START);
-            readUntil(bob, Protocol.GAME_START);
+            int roomId = alice.createRoom("방");
+            bob.joinRoom(roomId);
+            TestClient.startGame(alice, bob);
 
-            GameRoom room = server.room();
+            GameRoom room = server.lobby().room(roomId);
             synchronized (room) {
                 GameState game = room.state();
                 game.setPhase(Phase.RUMOR);
@@ -127,7 +131,7 @@ class InfoControllerTest {
                 assertEquals(1, game.findPlayer("alice").itemCount(Item.CERTIFICATE));
 
                 game.setDeck(deck());
-                for (int round = 1; round < GameConfig.TOTAL_ROUNDS; round++) {
+                for (int round = 1; round < GameConfig.BASE_ROUNDS; round++) {
                     game.startNextRound();
                 }
                 assertThrows(IllegalStateException.class,

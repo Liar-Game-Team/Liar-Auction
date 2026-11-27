@@ -50,10 +50,10 @@ public final class RoundPhaseTimer implements AutoCloseable {
         if (started) {
             throw new IllegalStateException("라운드 타이머가 이미 시작되었습니다");
         }
-        if (game.phase() != Phase.WAITING || game.players().size() != GameConfig.MAX_PLAYERS) {
+        if (game.phase() != Phase.WAITING || !game.hasEnoughPlayers()) {
             throw new IllegalStateException("두 플레이어가 대기 중일 때만 게임을 시작할 수 있습니다");
         }
-        if (game.deck().size() != GameConfig.TOTAL_ROUNDS) {
+        if (game.deck().isEmpty()) {
             throw new IllegalStateException("게임을 시작하려면 작품 덱이 필요합니다");
         }
 

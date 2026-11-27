@@ -26,7 +26,7 @@ public final class InfoPanel extends JPanel {
     private int certificates;
     private int jammers;
     private int round;
-    private int totalRounds = GameConfig.TOTAL_ROUNDS;
+    private int totalRounds = GameConfig.BASE_ROUNDS;
     private Phase phase = Phase.WAITING;
 
     public InfoPanel(Consumer<Message> sender) {
