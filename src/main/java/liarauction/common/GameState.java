@@ -15,7 +15,7 @@ public final class GameState {
 
     private final List<PlayerState> players = new ArrayList<>();
     private List<Artwork> deck = List.of();
-    /** 0이면 시작 전, 1부터 {@link GameConfig#TOTAL_ROUNDS}까지 */
+    /** 0이면 시작 전, 1부터 {@link #totalRounds()}까지 */
     private int round;
     private Phase phase = Phase.WAITING;
 
@@ -43,7 +43,12 @@ public final class GameState {
     }
 
     public synchronized boolean isFull() {
-        return players.size() == GameConfig.MAX_PLAYERS;
+        return players.size() >= GameConfig.MAX_PLAYERS;
+    }
+
+    /** 게임을 시작할 수 있는 인원인지 ({@link GameConfig#MIN_PLAYERS}명 이상) */
+    public synchronized boolean hasEnoughPlayers() {
+        return players.size() >= GameConfig.MIN_PLAYERS;
     }
 
     /** 없으면 null */
@@ -56,7 +61,10 @@ public final class GameState {
         return null;
     }
 
-    /** 상대 플레이어, 없으면 null */
+    /**
+     * 나 말고 첫 번째 플레이어, 없으면 null.
+     * 2인 기준으로 만든 메서드라 3명 이상에서는 "상대"가 하나로 정해지지 않는다 (교란 대상 선택은 #35).
+     */
     public synchronized PlayerState opponentOf(String nickname) {
         for (PlayerState p : players) {
             if (!p.nickname().equals(nickname)) {
@@ -67,17 +75,30 @@ public final class GameState {
     }
 
     /**
-     * 덱 설정 (파트 A의 덱 생성 결과).
+     * 덱 설정 (파트 A의 덱 생성 결과). 작품 수 = 총 라운드 수.
      *
-     * @throws IllegalArgumentException 작품 수가 라운드 수와 다를 때
+     * @throws IllegalArgumentException 작품 수가 지금 인원의 라운드 수와 다를 때
      */
     public synchronized void setDeck(List<Artwork> deck) {
         Objects.requireNonNull(deck, "deck");
-        if (deck.size() != GameConfig.TOTAL_ROUNDS) {
+        int expected = players.size() >= GameConfig.MIN_PLAYERS
+                ? GameConfig.roundsFor(players.size())
+                : GameConfig.BASE_ROUNDS;
+        if (deck.size() != expected) {
             throw new IllegalArgumentException(
-                    "작품 수 " + GameConfig.TOTAL_ROUNDS + "개 필요, 받은 개수 " + deck.size());
+                    "작품 수 " + expected + "개 필요, 받은 개수 " + deck.size());
         }
         this.deck = List.copyOf(deck);
+    }
+
+    /** 총 라운드 수 (덱의 작품 수), 덱이 없으면 0 */
+    public synchronized int totalRounds() {
+        return deck.size();
+    }
+
+    /** 브레이크타임이 들어가는 라운드 (이 라운드가 끝난 뒤), 덱이 없으면 0 */
+    public synchronized int breakAfterRound() {
+        return GameConfig.breakAfterRound(deck.size());
     }
 
     public synchronized List<Artwork> deck() {
@@ -105,7 +126,7 @@ public final class GameState {
     }
 
     public synchronized boolean hasNextRound() {
-        return round < GameConfig.TOTAL_ROUNDS;
+        return round < deck.size();
     }
 
     /**

@@ -29,12 +29,12 @@ class RoundPhaseTimerTest {
 
             assertTrue(listener.gameFinished.await(3, TimeUnit.SECONDS));
             assertEquals(Phase.GAME_OVER, game.phase());
-            assertEquals(GameConfig.TOTAL_ROUNDS, listener.rounds.size());
+            assertEquals(GameConfig.BASE_ROUNDS, listener.rounds.size());
             assertEquals(
-                    java.util.stream.IntStream.rangeClosed(1, GameConfig.TOTAL_ROUNDS).boxed().toList(),
+                    java.util.stream.IntStream.rangeClosed(1, GameConfig.BASE_ROUNDS).boxed().toList(),
                     listener.rounds);
-            assertEquals(GameConfig.TOTAL_ROUNDS, listener.auctionsClosed.size());
-            for (int round = 1; round <= GameConfig.TOTAL_ROUNDS; round++) {
+            assertEquals(GameConfig.BASE_ROUNDS, listener.auctionsClosed.size());
+            for (int round = 1; round <= GameConfig.BASE_ROUNDS; round++) {
                 assertEquals(List.of(
                                 Phase.REVEAL,
                                 Phase.RUMOR,
@@ -83,7 +83,7 @@ class RoundPhaseTimerTest {
         game.addPlayer("alice");
         game.addPlayer("bob");
         List<Artwork> deck = new ArrayList<>();
-        for (int i = 0; i < GameConfig.TOTAL_ROUNDS; i++) {
+        for (int i = 0; i < GameConfig.BASE_ROUNDS; i++) {
             deck.add(new Artwork(i + 1, "artwork-" + i, "artist", Grade.FAKE, 0));
         }
         game.setDeck(deck);

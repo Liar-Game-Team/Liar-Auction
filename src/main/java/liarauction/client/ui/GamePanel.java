@@ -1,11 +1,13 @@
 package liarauction.client.ui;
 
 import java.awt.BorderLayout;
+import java.util.List;
 import java.util.function.Consumer;
 import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JPanel;
+import liarauction.common.GameConfig;
 import liarauction.common.Message;
 import liarauction.common.Phase;
 import liarauction.common.Protocol;
@@ -37,13 +39,15 @@ public final class GamePanel extends JPanel {
         add(chat, BorderLayout.SOUTH);
     }
 
-    public void startGame(String myName, String opponent, int startCash, int totalRounds) {
+    public void startGame(String myName, List<String> players, int startCash, int totalRounds) {
         auction.clear();
         chat.clear();
         info.clear();
         info.setTotalRounds(totalRounds);
-        status.startGame(myName, opponent, startCash, totalRounds);
-        chat.addSystem(opponent + " 님과 게임을 시작합니다");
+        status.startGame(myName, players, startCash, totalRounds);
+        chat.addSystem(players.size() + "명 게임 시작 (" + String.join(", ", players) + "), 총 "
+                + totalRounds + "라운드, 브레이크타임은 "
+                + GameConfig.breakAfterRound(totalRounds) + "라운드 뒤");
     }
 
     public void stop() {
@@ -71,10 +75,18 @@ public final class GamePanel extends JPanel {
                 case Protocol.ITEMS -> info.updateItems(msg.intArg(0), msg.intArg(1));
                 case Protocol.ITEM_RESULT -> info.showItemResult(msg.arg(0), msg.arg(1));
                 case Protocol.RUMOR -> info.showRumor(msg.arg(0));
+                case Protocol.MISSION -> {
+                    info.showMission(msg.arg(0));
+                    chat.addSystem("히든 미션을 받았습니다. 오른쪽 위에서 확인하세요 (나만 보임)");
+                }
                 case Protocol.UPDATE_BID -> auction.updateBid(msg.arg(0), msg.intArg(1));
                 case Protocol.BID_REJECT -> auction.showNotice("입찰 거부: " + msg.arg(0));
                 case Protocol.ROUND_END -> auction.showRoundEnd(msg.arg(0), msg.intArg(1));
                 case Protocol.UPDATE_CASH -> status.setCash(msg.arg(0), msg.intArg(1));
+                case Protocol.PLAYER_LEFT -> {
+                    status.removePlayer(msg.arg(0));
+                    chat.addSystem(msg.arg(0) + " 님이 나갔습니다. 남은 사람끼리 계속합니다");
+                }
                 case Protocol.GAME_OVER -> {
                     status.stop();
                     chat.addSystem("게임 종료, 승자: " + msg.arg(0));

@@ -8,12 +8,12 @@ import java.util.Objects;
 
 /**
  * 멀티스레드 소켓 서버. 접속마다 {@link ClientHandler} 스레드를 하나씩 만든다.
- * 1:1 게임이라 방은 {@link GameRoom} 하나만 둔다.
+ * 로그인과 방 목록은 {@link Lobby}가, 방마다의 게임은 {@link GameRoom}이 맡는다.
  */
 public final class AuctionServer {
 
     private final int port;
-    private final GameRoom room;
+    private final Lobby lobby;
     private ServerSocket serverSocket;
     private Thread acceptThread;
 
@@ -24,7 +24,7 @@ public final class AuctionServer {
 
     AuctionServer(int port, AuctionTiming timing) {
         this.port = port;
-        this.room = new GameRoom(Objects.requireNonNull(timing, "timing"));
+        this.lobby = new Lobby(Objects.requireNonNull(timing, "timing"));
     }
 
     /** 포트를 열고 접속 받기를 시작한다 (바로 반환). */
@@ -43,8 +43,8 @@ public final class AuctionServer {
         return serverSocket == null ? port : serverSocket.getLocalPort();
     }
 
-    public GameRoom room() {
-        return room;
+    public Lobby lobby() {
+        return lobby;
     }
 
     /** 서버 종료, 접속 중인 클라이언트도 끊는다. */
@@ -61,7 +61,7 @@ public final class AuctionServer {
         } catch (IOException ignored) {
             // 닫는 중 오류는 무시
         }
-        room.closeAll();
+        lobby.closeAll();
     }
 
     /** {@link #stop()}이 불릴 때까지 기다린다. */
@@ -89,7 +89,7 @@ public final class AuctionServer {
             }
             log("접속: " + socket.getRemoteSocketAddress());
             try {
-                ClientHandler handler = new ClientHandler(socket, room);
+                ClientHandler handler = new ClientHandler(socket, lobby);
                 Thread t = new Thread(handler, "client-" + socket.getPort());
                 t.setDaemon(true);
                 t.start();
