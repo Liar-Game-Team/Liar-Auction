@@ -2,7 +2,7 @@ package liarauction.common;
 
 /**
  * 작품 등급. 진위·등급은 서버만 알고, 클라이언트에는 게임 종료 때 공개한다.
- * 등급별 개수의 합은 {@link GameConfig#TOTAL_ROUNDS}와 같아야 한다.
+ * 등급별 개수의 합은 기본 라운드 수 {@link GameConfig#BASE_ROUNDS}와 같아야 한다 (5~6명 덱은 #47).
  */
 public enum Grade {
     MASTERPIECE("명작", 2, 400, 600),

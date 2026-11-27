@@ -1,23 +1,27 @@
 package liarauction.client.ui;
 
 import java.awt.FlowLayout;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.Timer;
+import liarauction.common.GameConfig;
 import liarauction.common.Phase;
 
-/** 상단 상태 표시: 라운드, 단계, 남은 시간, 양쪽 현금 */
+/** 상단 상태 표시: 라운드, 단계, 남은 시간, 모든 플레이어 현금 (2~6명) */
 public final class StatusPanel extends JPanel {
 
     private final JLabel roundLabel = new JLabel();
     private final JLabel phaseLabel = new JLabel();
     private final JLabel timeLabel = new JLabel();
-    private final JLabel myCashLabel = new JLabel();
-    private final JLabel opponentCashLabel = new JLabel();
+    private final JLabel cashLabel = new JLabel();
 
+    /** 입장 순서대로 닉네임 → 현금 */
+    private final Map<String, Integer> cash = new LinkedHashMap<>();
     private String myName = "";
-    private String opponentName = "";
     private int totalRounds;
     private int secondsLeft;
     private final Timer countdown = new Timer(1000, e -> tick());
@@ -28,18 +32,19 @@ public final class StatusPanel extends JPanel {
         add(roundLabel);
         add(phaseLabel);
         add(timeLabel);
-        add(myCashLabel);
-        add(opponentCashLabel);
+        add(cashLabel);
     }
 
-    public void startGame(String myName, String opponentName, int startCash, int totalRounds) {
+    public void startGame(String myName, List<String> players, int startCash, int totalRounds) {
         this.myName = myName;
-        this.opponentName = opponentName;
         this.totalRounds = totalRounds;
+        cash.clear();
+        for (String name : players) {
+            cash.put(name, startCash);
+        }
         setRound(0);
         setPhase(Phase.WAITING, 0);
-        setCash(myName, startCash);
-        setCash(opponentName, startCash);
+        updateCash();
     }
 
     public void setRound(int round) {
@@ -58,16 +63,38 @@ public final class StatusPanel extends JPanel {
         }
     }
 
-    public void setCash(String nickname, int cash) {
-        if (nickname.equals(myName)) {
-            myCashLabel.setText("내 현금(" + myName + "): " + cash);
-        } else if (nickname.equals(opponentName)) {
-            opponentCashLabel.setText("상대 현금(" + opponentName + "): " + cash);
+    public void setCash(String nickname, int amount) {
+        if (cash.containsKey(nickname)) {
+            cash.put(nickname, amount);
+            updateCash();
         }
+    }
+
+    /** 게임 중 나간 플레이어는 목록에서 뺀다 */
+    public void removePlayer(String nickname) {
+        cash.remove(nickname);
+        updateCash();
     }
 
     public void stop() {
         countdown.stop();
+    }
+
+    private void updateCash() {
+        StringBuilder sb = new StringBuilder("현금 ");
+        boolean first = true;
+        for (Map.Entry<String, Integer> e : cash.entrySet()) {
+            if (!first) {
+                sb.append(" · ");
+            }
+            first = false;
+            sb.append(e.getKey());
+            if (e.getKey().equals(myName)) {
+                sb.append("(나)");
+            }
+            sb.append(' ').append(GameConfig.money(e.getValue()));
+        }
+        cashLabel.setText(sb.toString());
     }
 
     private void tick() {
