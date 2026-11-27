@@ -27,7 +27,7 @@ public final class MainFrame extends JFrame {
     private static final String GAME = "game";
 
     private final CardLayout cards = new CardLayout();
-    private final JPanel root = new JPanel(cards);
+    private final JPanel root = Theme.clear(new JPanel(cards));
     private final LoginPanel loginPanel = new LoginPanel(this::connect);
     private final RoomListPanel roomListPanel = new RoomListPanel(this::send);
     private final RoomPanel roomPanel = new RoomPanel(this::send);
@@ -41,14 +41,17 @@ public final class MainFrame extends JFrame {
     public MainFrame() {
         super("라이어 경매");
         setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-        setSize(900, 640);
+        setSize(1100, 760);
+        setMinimumSize(new java.awt.Dimension(960, 680));
         setLocationByPlatform(true);
 
         root.add(loginPanel, LOGIN);
         root.add(roomListPanel, ROOM_LIST);
         root.add(roomPanel, ROOM);
         root.add(gamePanel, GAME);
-        setContentPane(root);
+        HallBackground hall = new HallBackground(new java.awt.BorderLayout());
+        hall.add(root, java.awt.BorderLayout.CENTER);
+        setContentPane(hall);
 
         addWindowListener(new WindowAdapter() {
             @Override

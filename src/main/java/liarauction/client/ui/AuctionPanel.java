@@ -33,12 +33,23 @@ public final class AuctionPanel extends JPanel {
     public AuctionPanel(Consumer<Message> sender) {
         super(new BorderLayout(8, 8));
         Objects.requireNonNull(sender, "sender");
-        setBorder(BorderFactory.createTitledBorder("경매"));
+        Theme.clear(this);
 
-        titleLabel.setFont(titleLabel.getFont().deriveFont(22f));
-        priceLabel.setFont(priceLabel.getFont().deriveFont(18f));
+        // 테마 (#37): 작품 카드는 금박 액자, 제목은 명조, 현재가는 밝은 금색
+        titleLabel.setFont(Theme.ARTWORK);
+        titleLabel.setForeground(Theme.GOLD_LIGHT);
+        artistLabel.setFont(Theme.BODY.deriveFont(16f));
+        artistLabel.setForeground(Theme.TEXT_DIM);
+        priceLabel.setFont(Theme.NUMBER);
+        priceLabel.setForeground(Theme.GOLD);
+        bidderLabel.setForeground(Theme.TEXT);
+        timeLabel.setForeground(Theme.TEXT_DIM);
+        noticeLabel.setForeground(Theme.GOLD_LIGHT);
+        noticeLabel.setFont(Theme.BOLD.deriveFont(16f));
 
         JPanel card = new JPanel(new GridLayout(6, 1, 4, 4));
+        card.setBackground(Theme.CARD);
+        card.setBorder(Theme.frameBorder());
         card.add(titleLabel);
         card.add(artistLabel);
         card.add(priceLabel);
@@ -47,7 +58,7 @@ public final class AuctionPanel extends JPanel {
         card.add(noticeLabel);
         add(card, BorderLayout.CENTER);
 
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 4));
+        JPanel buttons = Theme.clear(new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 6)));
         for (int inc : GameConfig.BID_INCREMENTS) {
             JButton b = new JButton("+" + inc);
             b.addActionListener(e -> sender.accept(Message.of(Protocol.REQ_BID, inc)));

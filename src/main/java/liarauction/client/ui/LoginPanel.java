@@ -27,10 +27,17 @@ public final class LoginPanel extends JPanel {
 
     public LoginPanel(ConnectAction action) {
         super(new GridBagLayout());
-        setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        Theme.clear(this);
 
         JLabel title = new JLabel("라이어 경매", SwingConstants.CENTER);
-        title.setFont(title.getFont().deriveFont(28f));
+        title.setFont(Theme.DISPLAY);
+        title.setForeground(Theme.GOLD);
+        JLabel subtitle = Theme.hint(new JLabel("LIAR AUCTION  ·  진품인가, 가짜인가", SwingConstants.CENTER));
+        subtitle.setFont(Theme.BODY);
+
+        JPanel form = Theme.card(new JPanel(new GridBagLayout()), "입장");
+        form.setBorder(BorderFactory.createCompoundBorder(form.getBorder(),
+                BorderFactory.createEmptyBorder(8, 16, 8, 16)));
 
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(6, 6, 6, 6);
@@ -40,18 +47,30 @@ public final class LoginPanel extends JPanel {
         c.gridy = 0;
         c.gridwidth = 2;
         add(title, c);
+        c.gridy = 1;
+        c.insets = new Insets(0, 6, 24, 6);
+        add(subtitle, c);
+        c.insets = new Insets(6, 6, 6, 6);
 
-        c.gridwidth = 1;
-        addRow(c, 1, "서버", hostField);
-        addRow(c, 2, "포트", portField);
-        addRow(c, 3, "닉네임", nicknameField);
+        GridBagConstraints f = new GridBagConstraints();
+        f.insets = new Insets(6, 6, 6, 6);
+        f.fill = GridBagConstraints.HORIZONTAL;
+        f.gridwidth = 1;
+        addRow(form, f, 0, "서버", hostField);
+        addRow(form, f, 1, "포트", portField);
+        addRow(form, f, 2, "닉네임", nicknameField);
+        f.gridx = 0;
+        f.gridy = 3;
+        f.gridwidth = 2;
+        f.insets = new Insets(14, 6, 6, 6);
+        form.add(connectButton, f);
+        f.gridy = 4;
+        f.insets = new Insets(4, 6, 2, 6);
+        statusLabel.setForeground(Theme.BAD);
+        form.add(statusLabel, f);
 
-        c.gridx = 0;
-        c.gridy = 4;
-        c.gridwidth = 2;
-        add(connectButton, c);
-        c.gridy = 5;
-        add(statusLabel, c);
+        c.gridy = 2;
+        add(form, c);
 
         Runnable submit = () -> {
             int port;
@@ -69,13 +88,16 @@ public final class LoginPanel extends JPanel {
         nicknameField.addActionListener(e -> submit.run());
     }
 
-    private void addRow(GridBagConstraints c, int row, String label, JTextField field) {
+    private static void addRow(JPanel form, GridBagConstraints c, int row, String label, JTextField field) {
         c.gridy = row;
         c.gridx = 0;
         c.weightx = 0;
-        add(new JLabel(label), c);
+        JLabel l = new JLabel(label);
+        l.setForeground(Theme.TEXT_DIM);
+        form.add(l, c);
         c.gridx = 1;
-        add(field, c);
+        c.weightx = 1;
+        form.add(field, c);
     }
 
     public void showError(String message) {

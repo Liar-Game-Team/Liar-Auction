@@ -55,13 +55,15 @@ public final class RoomListPanel extends JPanel {
     public RoomListPanel(Consumer<Message> sender) {
         super(new BorderLayout(8, 8));
         this.sender = sender;
-        setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+        Theme.clear(this);
+        setBorder(BorderFactory.createEmptyBorder(70, 40, 20, 40));
 
-        welcomeLabel.setFont(welcomeLabel.getFont().deriveFont(20f));
+        Theme.title(welcomeLabel);
         add(welcomeLabel, BorderLayout.NORTH);
 
+        Theme.table(table);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        table.setRowHeight(26);
+        table.setRowHeight(30);
         table.getColumnModel().getColumn(0).setMaxWidth(60);
         table.getColumnModel().getColumn(2).setMaxWidth(80);
         table.getColumnModel().getColumn(3).setMaxWidth(90);
@@ -74,8 +76,9 @@ public final class RoomListPanel extends JPanel {
                 }
             }
         });
-        JScrollPane scroll = new JScrollPane(table);
-        scroll.setBorder(BorderFactory.createTitledBorder("방 목록"));
+        JScrollPane scroll = Theme.scroll(new JScrollPane(table));
+        scroll.setBorder(Theme.goldBorder("방 목록"));
+        scroll.setOpaque(true);
 
         JButton createButton = new JButton("방 만들기");
         JButton joinButton = new JButton("들어가기");
@@ -85,13 +88,14 @@ public final class RoomListPanel extends JPanel {
         joinButton.addActionListener(e -> joinSelected());
         quickButton.addActionListener(e -> sender.accept(Message.of(Protocol.REQ_QUICK_JOIN)));
         refreshButton.addActionListener(e -> sender.accept(Message.of(Protocol.REQ_ROOM_LIST)));
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 4));
+        JPanel buttons = Theme.clear(new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 4)));
         buttons.add(createButton);
         buttons.add(joinButton);
         buttons.add(quickButton);
         buttons.add(refreshButton);
 
-        JPanel center = new JPanel(new BorderLayout(4, 4));
+        JPanel center = Theme.clear(new JPanel(new BorderLayout(4, 4)));
+        Theme.hint(emptyLabel);
         center.add(scroll, BorderLayout.CENTER);
         center.add(emptyLabel, BorderLayout.NORTH);
         center.add(buttons, BorderLayout.SOUTH);
@@ -104,7 +108,7 @@ public final class RoomListPanel extends JPanel {
     /** 로그인 직후 */
     public void enter(String myName) {
         this.myName = myName;
-        welcomeLabel.setText(myName + " 님, 방을 만들거나 골라 들어가세요");
+        welcomeLabel.setText(myName + " 님, 경매장에 오신 것을 환영합니다");
     }
 
     /** 방에서 나와 돌아왔을 때 */
@@ -187,6 +191,8 @@ public final class RoomListPanel extends JPanel {
         addRow(form, c, 1, "최대 인원", maxBox);
         addRow(form, c, 2, lockBox, passwordField);
 
+        form.setOpaque(false);
+        lockBox.setOpaque(false);
         int ok = JOptionPane.showConfirmDialog(this, form, "방 만들기", JOptionPane.OK_CANCEL_OPTION);
         if (ok != JOptionPane.OK_OPTION) {
             return;

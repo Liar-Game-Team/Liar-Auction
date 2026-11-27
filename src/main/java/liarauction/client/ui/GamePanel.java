@@ -31,7 +31,9 @@ public final class GamePanel extends JPanel {
     private String myName = "";
 
     public GamePanel(Consumer<Message> sender) {
-        super(new BorderLayout(8, 8));
+        super(new BorderLayout(10, 10));
+        Theme.clear(this);
+        setBorder(javax.swing.BorderFactory.createEmptyBorder(64, 14, 12, 14));
         auction = new AuctionPanel(sender);
         info = new InfoPanel(sender);
         chat = new ChatPanel(sender);

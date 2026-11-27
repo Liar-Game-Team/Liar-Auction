@@ -53,7 +53,8 @@ public final class ResultDialog extends JDialog {
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
         winnerLabel = new JLabel(winnerText(players), SwingConstants.CENTER);
-        winnerLabel.setFont(winnerLabel.getFont().deriveFont(Font.BOLD, 22f));
+        winnerLabel.setFont(Theme.TITLE.deriveFont(30f));
+        winnerLabel.setForeground(Theme.GOLD);
         winnerLabel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         rankingTable = table(new String[] {"순위", "이름", "현금", "작품 가치", "미션 보너스", "최종"});
@@ -72,11 +73,13 @@ public final class ResultDialog extends JDialog {
 
         JPanel missions = new JPanel();
         missions.setLayout(new BoxLayout(missions, BoxLayout.Y_AXIS));
-        missions.setBorder(BorderFactory.createTitledBorder("히든 미션"));
+        Theme.card(missions, "히든 미션");
         for (PlayerRow p : players) {
             if (!p.mission().isEmpty()) {
-                missions.add(new JLabel(p.nickname() + ": " + p.mission()
-                        + (p.missionSuccess() ? "  → 성공" : "  → 실패")));
+                JLabel line = new JLabel("<html><div style='width:640px'>" + escape(p.nickname() + ": " + p.mission())
+                        + (p.missionSuccess() ? "  → <b>성공</b>" : "  → 실패") + "</div></html>");
+                line.setForeground(p.missionSuccess() ? Theme.GOOD : Theme.TEXT_DIM);
+                missions.add(line);
             }
         }
 
@@ -86,7 +89,7 @@ public final class ResultDialog extends JDialog {
             art.addRow(new Object[] {a.round(), a.title(), a.artist(), a.grade(), GameConfig.money(a.value()), a.owner()});
         }
 
-        JPanel center = new JPanel();
+        JPanel center = Theme.clear(new JPanel());
         center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
         center.add(titled(rankingTable, "순위"));
         if (missions.getComponentCount() > 0) {
@@ -96,16 +99,17 @@ public final class ResultDialog extends JDialog {
 
         JButton close = new JButton("닫기");
         close.addActionListener(e -> dispose());
-        JPanel south = new JPanel();
+        JPanel south = Theme.clear(new JPanel());
         south.add(close);
 
         JPanel content = new JPanel(new BorderLayout(8, 8));
+        content.setBackground(Theme.WALL);
         content.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
         content.add(winnerLabel, BorderLayout.NORTH);
         content.add(center, BorderLayout.CENTER);
         content.add(south, BorderLayout.SOUTH);
         setContentPane(content);
-        setSize(640, 560);
+        setSize(780, 600);
         setLocationRelativeTo(owner);
     }
 
@@ -118,6 +122,10 @@ public final class ResultDialog extends JDialog {
         return (firsts.size() == 1 ? "우승: " : "공동 1위: ") + String.join(", ", firsts);
     }
 
+    private static String escape(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
     private static JTable table(String[] columns) {
         DefaultTableModel model = new DefaultTableModel(columns, 0) {
             @Override
@@ -125,16 +133,16 @@ public final class ResultDialog extends JDialog {
                 return false;
             }
         };
-        JTable t = new JTable(model);
-        t.setRowHeight(24);
+        JTable t = Theme.table(new JTable(model));
+        t.setRowHeight(26);
         t.setFillsViewportHeight(true);
         return t;
     }
 
     private static JScrollPane titled(JTable table, String title) {
-        JScrollPane scroll = new JScrollPane(table);
-        scroll.setBorder(BorderFactory.createTitledBorder(title));
-        scroll.setPreferredSize(new Dimension(600, 40 + table.getRowHeight() * Math.max(2, table.getRowCount())));
+        JScrollPane scroll = Theme.scroll(new JScrollPane(table));
+        scroll.setBorder(Theme.goldBorder(title));
+        scroll.setPreferredSize(new Dimension(740, 44 + table.getRowHeight() * Math.max(2, table.getRowCount())));
         return scroll;
     }
 
@@ -145,7 +153,11 @@ public final class ResultDialog extends JDialog {
             public Component getTableCellRendererComponent(JTable t, Object value, boolean selected,
                     boolean focus, int r, int c) {
                 Component comp = super.getTableCellRendererComponent(t, value, selected, focus, r, c);
-                comp.setFont(comp.getFont().deriveFont(r == row ? Font.BOLD : Font.PLAIN));
+                comp.setFont(r == row ? Theme.BOLD : Theme.BODY);
+                if (!selected) {
+                    comp.setForeground(r == row ? Theme.GOLD_LIGHT : Theme.TEXT);
+                    comp.setBackground(Theme.FIELD);
+                }
                 return comp;
             }
         };

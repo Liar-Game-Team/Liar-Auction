@@ -27,8 +27,15 @@ public final class StatusPanel extends JPanel {
     private final Timer countdown = new Timer(1000, e -> tick());
 
     public StatusPanel() {
-        super(new FlowLayout(FlowLayout.LEFT, 16, 4));
-        setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        super(new FlowLayout(FlowLayout.LEFT, 22, 6));
+        Theme.card(this, null);
+        roundLabel.setFont(Theme.TITLE.deriveFont(20f));
+        roundLabel.setForeground(Theme.GOLD);
+        phaseLabel.setFont(Theme.BOLD.deriveFont(16f));
+        phaseLabel.setForeground(Theme.TEXT);
+        timeLabel.setFont(Theme.NUMBER.deriveFont(18f));
+        timeLabel.setForeground(Theme.GOLD_LIGHT);
+        cashLabel.setForeground(Theme.TEXT_DIM);
         add(roundLabel);
         add(phaseLabel);
         add(timeLabel);

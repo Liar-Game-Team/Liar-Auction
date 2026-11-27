@@ -37,16 +37,23 @@ public final class RoomPanel extends JPanel {
 
     public RoomPanel(Consumer<Message> sender) {
         super(new BorderLayout(8, 8));
-        setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+        Theme.clear(this);
+        setBorder(BorderFactory.createEmptyBorder(70, 60, 16, 60));
 
-        titleLabel.setFont(titleLabel.getFont().deriveFont(22f));
+        Theme.title(titleLabel);
         add(titleLabel, BorderLayout.NORTH);
 
         JList<String> playerList = new JList<>(playerModel);
-        playerList.setFont(playerList.getFont().deriveFont(16f));
-        playerScroll = new JScrollPane(playerList);
+        playerList.setFont(Theme.BODY.deriveFont(17f));
+        playerList.setBackground(Theme.FIELD);
+        playerList.setForeground(Theme.TEXT);
+        playerList.setFixedCellHeight(34);
+        playerScroll = Theme.scroll(new JScrollPane(playerList));
+        Theme.hint(hintLabel);
+        hintLabel.setFont(Theme.BODY);
+        hintLabel.setForeground(Theme.GOLD_LIGHT);
 
-        JPanel center = new JPanel(new BorderLayout(4, 4));
+        JPanel center = Theme.clear(new JPanel(new BorderLayout(4, 8)));
         center.add(playerScroll, BorderLayout.CENTER);
         center.add(hintLabel, BorderLayout.SOUTH);
         add(center, BorderLayout.CENTER);
@@ -54,13 +61,13 @@ public final class RoomPanel extends JPanel {
         readyButton.addActionListener(e -> sender.accept(Message.of(Protocol.REQ_READY, !amReady)));
         startButton.addActionListener(e -> sender.accept(Message.of(Protocol.REQ_START)));
         leaveButton.addActionListener(e -> sender.accept(Message.of(Protocol.REQ_LEAVE_ROOM)));
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 4));
+        JPanel buttons = Theme.clear(new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 4)));
         buttons.add(readyButton);
         buttons.add(startButton);
         buttons.add(leaveButton);
 
         chat = new ChatPanel(sender, "방 채팅");
-        JPanel south = new JPanel(new BorderLayout(4, 4));
+        JPanel south = Theme.clear(new JPanel(new BorderLayout(4, 4)));
         south.add(buttons, BorderLayout.NORTH);
         south.add(chat, BorderLayout.CENTER);
         add(south, BorderLayout.SOUTH);
@@ -83,8 +90,7 @@ public final class RoomPanel extends JPanel {
         amHost = myName.equals(host);
         amReady = readyPlayers.contains(myName);
 
-        playerScroll.setBorder(BorderFactory.createTitledBorder(
-                "참가자 " + players.size() + " / " + maxPlayers + "명"));
+        playerScroll.setBorder(Theme.goldBorder("참가자 " + players.size() + " / " + maxPlayers + "명"));
         playerModel.clear();
         int notReady = 0;
         for (String name : players) {
