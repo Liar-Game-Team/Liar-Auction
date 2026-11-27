@@ -1,9 +1,13 @@
 package liarauction.client.ui;
 
 import java.awt.BorderLayout;
+import java.awt.Container;
+import java.awt.Dimension;
+import java.awt.LayoutManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import javax.swing.JLayeredPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import liarauction.common.GameConfig;
@@ -14,9 +18,11 @@ import liarauction.common.Protocol;
 /**
  * 게임 화면. 서버 메시지를 받아 각 영역으로 나눠 준다.
  * <pre>
- * ┌──────────── 상태 (라운드, 단계, 시간, 현금) ────────────┐
- * │         경매 (파트 A)          │  감정 정보 (파트 B)   │
- * ├──────────────────── 협상 채팅 ─────────────────────────┤
+ * ┌──────────── 상태 (라운드, 단계, 시간, 내 현금) ──────────┐
+ * │  진행자 (말풍선)               │                        │
+ * │  경매 작품 카드 (파트 A)        │  소문·아이템·미션 (B)   │
+ * └────────────────────────────────┴────────────────────────┘
+ *   + 위에 떠 있는 채팅창 (#39, 드래그·접기)
  * </pre>
  */
 public final class GamePanel extends JPanel {
@@ -25,6 +31,9 @@ public final class GamePanel extends JPanel {
     private final AuctionPanel auction;
     private final InfoPanel info;
     private final ChatPanel chat;
+    /** 떠 있는 채팅창 (#39) */
+    private final FloatingChat floatingChat;
+    private Phase lastPhase;
     /** 진행자 (#40) */
     private final HostPanel host = new HostPanel();
     private final HostScript script = new HostScript();
@@ -34,22 +43,79 @@ public final class GamePanel extends JPanel {
     private String myName = "";
 
     public GamePanel(Consumer<Message> sender) {
-        super(new BorderLayout(10, 10));
+        super(new BorderLayout());
         Theme.clear(this);
-        setBorder(javax.swing.BorderFactory.createEmptyBorder(64, 14, 12, 14));
         auction = new AuctionPanel(sender);
         info = new InfoPanel(sender);
-        chat = new ChatPanel(sender);
-        chat.setPreferredSize(new java.awt.Dimension(0, 150));
+        floatingChat = new FloatingChat(sender);
+        chat = floatingChat.chat();
 
-        add(status, BorderLayout.NORTH);
+        JPanel board = Theme.clear(new JPanel(new BorderLayout(10, 10)));
+        board.setBorder(javax.swing.BorderFactory.createEmptyBorder(64, 14, 58, 14));
+        board.add(status, BorderLayout.NORTH);
         // 가운데: 위에는 진행자, 아래에는 경매 작품 카드
         JPanel stage = Theme.clear(new JPanel(new BorderLayout(0, 8)));
         stage.add(host, BorderLayout.NORTH);
         stage.add(auction, BorderLayout.CENTER);
-        add(stage, BorderLayout.CENTER);
-        add(info, BorderLayout.EAST);
-        add(chat, BorderLayout.SOUTH);
+        board.add(stage, BorderLayout.CENTER);
+        board.add(info, BorderLayout.EAST);
+
+        // 아래층에 게임 화면, 위층에 떠 있는 채팅창
+        JLayeredPane layers = new JLayeredPane();
+        layers.setLayout(new FloatLayout(board, floatingChat));
+        layers.add(board, JLayeredPane.DEFAULT_LAYER);
+        layers.add(floatingChat, JLayeredPane.PALETTE_LAYER);
+        add(layers, BorderLayout.CENTER);
+    }
+
+    /** 게임 화면은 꽉 채우고, 채팅창은 처음엔 왼쪽 아래에 두고 그 뒤로는 사용자가 옮긴 자리 (화면 안으로만) */
+    private static final class FloatLayout implements LayoutManager {
+        private final JPanel board;
+        private final FloatingChat chat;
+        private boolean placed;
+
+        FloatLayout(JPanel board, FloatingChat chat) {
+            this.board = board;
+            this.chat = chat;
+        }
+
+        @Override
+        public void layoutContainer(Container parent) {
+            int w = parent.getWidth();
+            int h = parent.getHeight();
+            board.setBounds(0, 0, w, h);
+            Dimension size = chat.getPreferredSize();
+            if (!placed && w > 0 && h > 0) {
+                chat.setBounds(14, h - size.height - 10, size.width, size.height);
+                placed = true;
+            } else {
+                chat.setSize(size);
+                chat.keepInside();
+            }
+        }
+
+        @Override
+        public Dimension preferredLayoutSize(Container parent) {
+            return board.getPreferredSize();
+        }
+
+        @Override
+        public Dimension minimumLayoutSize(Container parent) {
+            return board.getMinimumSize();
+        }
+
+        @Override
+        public void addLayoutComponent(String name, java.awt.Component comp) {
+        }
+
+        @Override
+        public void removeLayoutComponent(java.awt.Component comp) {
+        }
+    }
+
+    /** 떠 있는 채팅창 (테스트·미리보기용) */
+    FloatingChat floatingChat() {
+        return floatingChat;
     }
 
     public void startGame(String myName, List<String> players, int startCash, int totalRounds) {
@@ -57,7 +123,9 @@ public final class GamePanel extends JPanel {
         resultPlayers.clear();
         resultArtworks.clear();
         auction.clear();
-        chat.clear();
+        floatingChat.reset();
+        chat.setMyName(myName);
+        lastPhase = null;
         info.clear();
         info.setTotalRounds(totalRounds);
         status.startGame(myName, players, startCash, totalRounds);
@@ -90,6 +158,15 @@ public final class GamePanel extends JPanel {
                     status.setPhase(phase, secondsRemaining);
                     info.setPhase(phase);
                     auction.setAuctionPhase(phase, secondsRemaining);
+                    // 협상 때는 채팅창을 펼치고, 경매가 시작되면 입찰 버튼을 가리지 않게 접는다
+                    if (phase != lastPhase) {
+                        if (phase == Phase.NEGOTIATION) {
+                            floatingChat.expand();
+                        } else if (phase == Phase.AUCTION) {
+                            floatingChat.collapse();
+                        }
+                        lastPhase = phase;
+                    }
                 }
                 case Protocol.ITEMS -> info.updateItems(msg.intArg(0), msg.intArg(1));
                 case Protocol.ITEM_RESULT -> info.showItemResult(msg.arg(0), msg.arg(1));
